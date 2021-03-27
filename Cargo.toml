@@ -3,7 +3,11 @@ name = "protospec"
 version = "0.1.0"
 authors = ["Protryon <max.bruce12@gmail.com>"]
 edition = "2018"
-
+description = "One binary format language to rule them all, One binary format language to find them, One binary format language to bring them all and in the darkness bind them."
+repository = "https://github.com/Protryon/protospec"
+license = "MIT"
+keywords = ["binary", "format", "language", "protospec", "compiler"]
+categories = ["compilers", "development-tools", "parsing"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
