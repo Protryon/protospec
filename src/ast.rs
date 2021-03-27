@@ -366,7 +366,7 @@ impl_node!(Ident);
 
 #[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]
 pub struct Str {
-    pub content: String,
+    pub content: Vec<u8>,
     pub span: Span,
 }
 

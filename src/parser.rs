@@ -900,7 +900,7 @@ fn parse_primary_expression(t: &mut TokenIter) -> ParseResult<Expression> {
         }),
         Token::Ident(name) => {
             let ident = Ident { name, span };
-            if t.eat(Token::Dot).is_some() {
+            if t.eat(Token::DoubleColon).is_some() {
                 let variant = t.expect_ident()?;
                 Expression::EnumAccess(EnumAccessExpression {
                     span: ident.span + ident.span,

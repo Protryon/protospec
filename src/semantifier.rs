@@ -5,7 +5,7 @@ use crate::Span;
 use crate::{asg::*, ScalarType};
 use ast::Node;
 use indexmap::IndexMap;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::fmt;
 use std::{sync::Arc, unimplemented};
 use thiserror::Error;
@@ -82,7 +82,7 @@ pub enum PartialType {
 
 impl PartialType {
     fn assignable_from(&self, other: &Type) -> bool {
-        match (self, other.resolved()) {
+        match (self, other.resolved().as_ref()) {
             (t1, Type::Foreign(f2)) => f2.obj.assignable_to_partial(t1),
             (PartialType::Scalar(scalar_type), Type::Enum(e1)) => {
                 if let Some(scalar_type) = scalar_type {
@@ -97,7 +97,7 @@ impl PartialType {
             }
             (PartialType::Array(None), Type::Array(_)) => true,
             (PartialType::Array(Some(element)), Type::Array(array_type)) => {
-                element.assignable_from(&array_type.element.type_)
+                element.assignable_from(&array_type.element.type_.borrow())
             }
             (PartialType::Any, _) => true,
             _ => false,
@@ -121,9 +121,9 @@ impl fmt::Display for PartialType {
 impl Into<PartialType> for Type {
     fn into(self) -> PartialType {
         match self {
-            Type::Ref(x) => x.target.type_.clone().into(),
+            Type::Ref(x) => x.target.type_.borrow().clone().into(),
             Type::Scalar(x) => PartialType::Scalar(Some(x)),
-            Type::Array(x) => PartialType::Array(Some(Box::new(x.element.type_.clone().into()))),
+            Type::Array(x) => PartialType::Array(Some(Box::new(x.element.type_.borrow().clone().into()))),
             x => PartialType::Type(x),
         }
     }
@@ -146,7 +146,8 @@ impl Program {
         for declaration in ast.declarations.iter() {
             match declaration {
                 ast::Declaration::Import(import) => {
-                    let normalized = resolver.normalize_import(&import.from.content)?;
+                    let content = String::from_utf8_lossy(&import.from.content[..]).into_owned();
+                    let normalized = resolver.normalize_import(&content[..])?;
                     if let Some(_cached) = cache.get(&normalized) {
                     } else {
                         let loaded = resolver.resolve_import(&normalized)?;
@@ -155,7 +156,7 @@ impl Program {
                                 Ok(x) => x,
                                 Err(e) => {
                                     return Err(AsgError::ImportParse(
-                                        import.from.content.clone(),
+                                        content,
                                         import.from.span,
                                         e,
                                     ))
@@ -166,7 +167,7 @@ impl Program {
                             cache.insert(normalized, asg);
                         } else {
                             return Err(AsgError::ImportMissing(
-                                import.from.content.clone(),
+                                content,
                                 import.from.span,
                             ));
                         }
@@ -200,6 +201,7 @@ impl Program {
         }));
 
         {
+            let mut return_fields = vec![];
             let scope = Arc::new(RefCell::new(Scope {
                 parent_scope: None,
                 program: program.clone(),
@@ -210,7 +212,8 @@ impl Program {
             for declaration in ast.declarations.iter() {
                 match declaration {
                     ast::Declaration::Import(import) => {
-                        let normalized = resolver.normalize_import(&import.from.content)?;
+                        let content = String::from_utf8_lossy(&import.from.content[..]);
+                        let normalized = resolver.normalize_import(content.as_ref())?;
                         if let Some(cached) = import_cache.get(&normalized) {
                             for import_item in import.items.iter() {
                                 let imported_name = if let Some(alias) = import_item.alias.as_ref()
@@ -258,16 +261,16 @@ impl Program {
                                     let field = Arc::new(Field {
                                         name: ffi.name.name.clone(),
                                         arguments: RefCell::new(obj.arguments()),
-                                        type_: Type::Foreign(Arc::new(NamedForeignType {
+                                        type_: RefCell::new(Type::Foreign(Arc::new(NamedForeignType {
                                             name: ffi.name.name.clone(),
                                             span: ffi.span,
                                             obj,
-                                        })),
+                                        }))),
                                         condition: RefCell::new(None),
                                         transforms: RefCell::new(vec![]),
                                         span: ffi.span,
                                         toplevel: true,
-                                        is_auto: false,
+                                        is_auto: Cell::new(false),
                                     });
 
                                     program
@@ -349,13 +352,17 @@ impl Program {
                             ));
                         }
 
-                        let field = Scope::convert_ast_field(
-                            &scope,
-                            typ.name.name.clone(),
-                            &typ.value,
-                            Some(&typ.arguments[..]),
-                            true
-                        )?;
+                        let field = Arc::new(Field {
+                            name: typ.name.name.clone(),
+                            arguments: RefCell::new(vec![]),
+                            span: typ.value.span,
+                            type_: RefCell::new(Type::Bool), // placeholder
+                            condition: RefCell::new(None),
+                            transforms: RefCell::new(vec![]),
+                            toplevel: true,
+                            is_auto: Cell::new(false),
+                        });
+                        return_fields.push(typ);
 
                         program
                             .borrow_mut()
@@ -364,6 +371,17 @@ impl Program {
                     }
                 }
             }
+            for typ in return_fields {
+                let program = program.borrow();
+                let field = program.types.get(&typ.name.name).unwrap();
+                Scope::convert_ast_field(
+                    &scope,
+                    &typ.value,
+                    field,
+                    Some(&typ.arguments[..]),
+                )?;
+    
+            }    
         }
 
         Ok(Arc::try_unwrap(program)
@@ -396,11 +414,10 @@ impl Scope {
 
     fn convert_ast_field(
         self_: &Arc<RefCell<Scope>>,
-        name: String,
         field: &ast::Field,
+        into: &Arc<Field>,
         ast_arguments: Option<&[ast::TypeArgument]>,
-        is_toplevel: bool,
-    ) -> AsgResult<Arc<Field>> {
+    ) -> AsgResult<()> {
         let sub_scope = Arc::new(RefCell::new(Scope {
             parent_scope: Some(self_.clone()),
             program: self_.borrow().program.clone(),
@@ -514,18 +531,14 @@ impl Scope {
                 x => return Err(AsgError::InvalidFlag(flag.span)),
             }
         }
-        let field_out = Arc::new(Field {
-            name: name.clone(),
-            type_: asg_type,
-            condition: RefCell::new(condition),
-            transforms: RefCell::new(transforms),
-            span: field.span,
-            toplevel: is_toplevel,
-            arguments: RefCell::new(arguments),
-            is_auto,
-        });
 
-        Ok(field_out)
+        into.type_.replace(asg_type);
+        into.condition.replace(condition);
+        into.transforms.replace(transforms);
+        into.arguments.replace(arguments);
+        into.is_auto.replace(is_auto);
+
+        Ok(())
     }
 
     fn convert_ast_type(
@@ -556,19 +569,29 @@ impl Scope {
                             defined.span,
                         ));
                     }
-                    let field = Scope::convert_ast_field(
+                    let field_out = Arc::new(Field {
+                        name: name.name.clone(),
+                        type_: RefCell::new(Type::Bool),
+                        condition: RefCell::new(None),
+                        transforms: RefCell::new(vec![]),
+                        span: typ.span,
+                        toplevel: false,
+                        arguments: RefCell::new(vec![]),
+                        is_auto: Cell::new(false),
+                    });
+            
+                    Scope::convert_ast_field(
                         &sub_scope,
-                        name.name.clone(),
                         typ,
+                        &field_out,
                         None,
-                        false,
                     )?;
 
                     sub_scope
                         .borrow_mut()
                         .declared_fields
-                        .insert(name.name.clone(), field.clone());
-                    items.insert(name.name.clone(), field);
+                        .insert(name.name.clone(), field_out.clone());
+                    items.insert(name.name.clone(), field_out);
                 }
 
                 Type::Container(Box::new(ContainerType { length, items }))
@@ -617,6 +640,8 @@ impl Scope {
                     if item.is_some() {
                         last_defined_item = Some(cons.clone());
                         undefined_counter = 1;
+                    } else {
+                        undefined_counter += 1;
                     }
                     items.insert(name.name.clone(), cons);
                 }
@@ -637,13 +662,13 @@ impl Scope {
                 }
                 let field = Arc::new(Field {
                     name: "$array_field".to_string(),
-                    type_: element,
+                    type_: RefCell::new(element),
                     arguments: RefCell::new(vec![]),
                     condition: RefCell::new(None),
                     transforms: RefCell::new(vec![]),
                     span: value.span,
                     toplevel: false,
-                    is_auto: false,
+                    is_auto: Cell::new(false),
                 });
 
                 Type::Array(Box::new(ArrayType {
@@ -885,7 +910,7 @@ impl Scope {
                         ))
                     }
                 };
-                let variant = match &field.type_ {
+                let variant = match &*field.type_.borrow() {
                     Type::Enum(e) => e
                         .items
                         .get(&expr.variant.name)
@@ -897,7 +922,7 @@ impl Scope {
                         .clone(),
                     _ => {
                         return Err(AsgError::UnexpectedType(
-                            field.type_.to_string(),
+                            field.type_.borrow().to_string(),
                             "enum".to_string(),
                             expr.name.span,
                         ));

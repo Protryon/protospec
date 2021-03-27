@@ -30,8 +30,8 @@ pub enum Instruction {
     DecodePrimitive(Target, usize, PrimitiveType),
     DecodePrimitiveArray(Target, usize, PrimitiveType, Option<usize>),
 
-    // register representing: internal stream, term, output handle, inner
-    Loop(Target, Option<usize>, usize, Vec<Instruction>),
+    // register representing: internal stream, end index, terminator, output handle, inner
+    Loop(Target, Option<usize>, Option<usize>, usize, Vec<Instruction>),
     LoopOutput(usize, usize), // output handle, item
     Conditional(usize, usize, usize, Vec<Instruction>), // target, interior_register, condition, if_true
 }
@@ -63,7 +63,7 @@ impl Context {
     pub fn decode_field_top(&mut self, field: &Arc<Field>) -> usize {
         assert!(field.toplevel);
         let value = self.decode_field(Target::Direct, field).unwrap();
-        match &field.type_ {
+        match &*field.type_.borrow() {
             Type::Foreign(_) => (),
             Type::Container(_) => (),
             Type::Enum(_) => (),
@@ -116,7 +116,7 @@ impl Context {
         }
 
         //todo: assert condition matching actual presence
-        let emitted = match &field.type_ {
+        let emitted = match &*field.type_.borrow() {
             Type::Container(c) => {
                 let buf_target = if let Some(length) = &c.length {
                     //todo: use limited stream
@@ -129,7 +129,7 @@ impl Context {
                     source
                 };
                 for (name, child) in c.items.iter() {
-                    let decoded = if matches!(child.type_, Type::Container(_)) {
+                    let decoded = if matches!(&*child.type_.borrow(), Type::Container(_)) {
                         self.decode_field(buf_target, child)
                     } else {
                         self.decode_field(buf_target, child)
@@ -142,8 +142,8 @@ impl Context {
                     let emitted = self.alloc_register();
                     let mut items = vec![];
                     for (name, child) in c.flatten_view() {
-                        if !matches!(child.type_, Type::Container(_)) {
-                            items.push((name.clone(), *self.field_register_map.get(name).expect("missing field in field_register_map")));
+                        if !matches!(&*child.type_.borrow(), Type::Container(_)) {
+                            items.push((name.clone(), *self.field_register_map.get(&name).expect("missing field in field_register_map")));
                         }
                     }
                     self.instructions.push(Instruction::Construct(emitted, Constructable::Struct {
@@ -173,12 +173,17 @@ impl Context {
 
     pub fn decode_type(&mut self, source: Target, field: &Arc<Field>) -> usize {
         let output = self.alloc_register();
-        match &field.type_ {
+        match &*field.type_.borrow() {
             Type::Container(_) => unimplemented!(),
             Type::Array(c) => {
-                if c.length.expandable && c.length.value.is_some() {
-                    todo!()
-                }
+                let terminator = if c.length.expandable && c.length.value.is_some() {
+                    let len = c.length.value.as_ref().cloned().unwrap();
+                    let r = self.alloc_register();
+                    self.instructions.push(Instruction::Eval(r, len));
+                    Some(r)
+                } else {
+                    None
+                };
             
                 let len = if c.length.expandable {
                     None
@@ -191,8 +196,9 @@ impl Context {
                 
                 if c.element.condition.borrow().is_none()
                     && c.element.transforms.borrow().len() == 0
+                    && terminator.is_none()
                 {
-                    match &c.element.type_ {
+                    match &*c.element.type_.borrow() {
                         // todo: const-length type optimizations for container/array/foreign
                         Type::Container(_)
                         | Type::Array(_)
@@ -253,7 +259,7 @@ impl Context {
                 }
                 self.instructions.push(Instruction::LoopOutput(output, item.unwrap()));
                 let drained = self.instructions.drain(current_pos..).collect();
-                self.instructions.push(Instruction::Loop(source, len, output, drained));
+                self.instructions.push(Instruction::Loop(source, len, terminator, output, drained));
                 output
             },
             Type::Enum(e) => {
@@ -287,7 +293,7 @@ impl Context {
                     self.instructions.push(Instruction::Eval(r, arg.clone()));
                     args.push(r);
                 }
-                if let Type::Foreign(f) = &r.target.type_ {
+                if let Type::Foreign(f) = &*r.target.type_.borrow() {
                     self.instructions.push(Instruction::DecodeForeign(source, output, f.clone(), args));
                 } else {
                     self.instructions.push(Instruction::DecodeRef(source, output, r.target.name.clone(), args));

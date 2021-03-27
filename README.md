@@ -110,7 +110,7 @@ container {
 }
 ```
 
-*unimplemented* Arrays may denote a sequence-terminated unbounded array via `[.."X"]` where X is any string sequence for which to terminate the string.
+Arrays may denote a sequence-terminated unbounded array via `[.."X"]` where X is any string sequence for which to terminate the string.
 ```
 container {
     my_c_string: u8[.."\0"],
@@ -181,7 +181,6 @@ Example implementation:
 * `async`/tokio support
 * ffi for conditionals/exprs
 * generics for types
-* support delimeter terminator
 * support array-interior transformations & conditions in ASG
 * add ability to reference original field in transform
 * add get-length builtin function or operator for use in conditionals

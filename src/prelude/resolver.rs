@@ -25,6 +25,7 @@ impl<T: ImportResolver + 'static> ImportResolver for PreludeImportResolver<T> {
             "v32" => Some(Box::new(VarInt::new(ScalarType::I32))),
             "v64" => Some(Box::new(VarInt::new(ScalarType::I64))),
             "v128" => Some(Box::new(VarInt::new(ScalarType::I128))),
+            "utf8" => Some(Box::new(Utf8)),
             x => self.0.resolve_ffi_type(x)?,
         })
     }

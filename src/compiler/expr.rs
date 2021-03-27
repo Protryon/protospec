@@ -1,7 +1,10 @@
 use std::{
     cmp::{Ordering, PartialOrd},
     ops::{Add, Div, Mul, Neg, Rem, Sub},
+    fmt::Write,
 };
+
+use proc_macro2::Literal;
 
 use super::*;
 
@@ -9,7 +12,7 @@ use super::*;
 pub enum ConstValue {
     Int(ConstInt),
     Bool(bool),
-    String(String),
+    String(Vec<u8>),
     F32(f32),
     F64(f64),
 }
@@ -33,8 +36,9 @@ impl Add for ConstValue {
             (ConstValue::Int(i1), ConstValue::Int(i2)) => Some(ConstValue::Int(i1.add(i2)?)),
             (ConstValue::F32(i1), ConstValue::F32(i2)) => Some(ConstValue::F32(i1.add(i2))),
             (ConstValue::F64(i1), ConstValue::F64(i2)) => Some(ConstValue::F64(i1.add(i2))),
-            (ConstValue::String(i1), ConstValue::String(i2)) => {
-                Some(ConstValue::String(i1.add(&i2)))
+            (ConstValue::String(mut i1), ConstValue::String(i2)) => {
+                i1.extend(i2);
+                Some(ConstValue::String(i1))
             }
             _ => None,
         }
@@ -124,7 +128,12 @@ impl ConstValue {
                 U128(x) => quote! { #x },
             },
             ConstValue::Bool(b) => quote! { #b },
-            ConstValue::String(s) => quote! { #s },
+            ConstValue::String(c) => {
+                let c = Literal::byte_string(&c[..]);
+                quote! {
+                    #c
+                }
+            },
             ConstValue::F32(s) => quote! { #s },
             ConstValue::F64(s) => quote! { #s },
         }
@@ -316,7 +325,7 @@ pub fn emit_expression<F: Fn(&Arc<Field>) -> TokenStream>(
             }
         }
         ConstRef(c) => {
-            let c = format_ident!("C_{}", c.name);
+            let c = format_ident!("{}", c.name);
             quote! {
                 #c
             }
@@ -329,7 +338,7 @@ pub fn emit_expression<F: Fn(&Arc<Field>) -> TokenStream>(
         }
         FieldRef(c) => ref_resolver(c),
         Str(c) => {
-            let c = &c.content;
+            let c = Literal::byte_string(&c.content[..]);
             quote! {
                 #c
             }

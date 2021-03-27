@@ -59,7 +59,7 @@ impl Context {
 
     pub fn encode_field_top(&mut self, field: &Arc<Field>) {
         let top = self.alloc_register(); // implicitly set to self/equivalent
-        match &field.type_ {
+        match &*field.type_.borrow() {
             Type::Foreign(_) => return,
             Type::Container(_) => (),
             Type::Enum(_) => (),
@@ -125,7 +125,7 @@ impl Context {
             source
         };
         
-        match &field.type_ {
+        match &*field.type_.borrow() {
             Type::Container(c) => {
                 let buf_target = if let Some(length) = &c.length {
                     //todo: use limited stream
@@ -139,14 +139,14 @@ impl Context {
                 };
                 let mut auto_target = vec![];
                 for (name, child) in c.items.iter() {
-                    if child.is_auto {
+                    if child.is_auto.get() {
                         let new_target = self.alloc_register();
                         self.instructions.push(Instruction::AllocDynBuf(new_target));
                         auto_target.push((new_target, child));
                         continue;
                     }
                     let (real_target, auto_field) = auto_target.last().map(|x| (Target::Buf(x.0), Some(&x.1))).unwrap_or_else(|| (buf_target, None));
-                    if matches!(child.type_, Type::Container(_)) {
+                    if matches!(&*child.type_.borrow(), Type::Container(_)) {
                         self.encode_field(real_target, root, source, child);
                     } else {
                         let value = self.alloc_register();
@@ -159,12 +159,14 @@ impl Context {
                             let (auto_target, _) = auto_target.pop().unwrap();
                             self.encode_field(buf_target, root, resolved, auto_field);
                             self.instructions.push(Instruction::EmitBuf(buf_target, auto_target));
+                        } else {
+                            panic!("unresolved +auto field");
                         }
                     }
                 }
                 if let Some(length) = &c.length {
                     match length {
-                        Expression::FieldRef(f) if f.is_auto => {
+                        Expression::FieldRef(f) if f.is_auto.get() => {
                             let target = self.alloc_register();
                             self.instructions.push(Instruction::GetLen(target, buf_target.unwrap_buf()));
                             self.resolved_autos.insert(f.name.clone(), target);
@@ -220,24 +222,43 @@ impl Context {
         match type_ {
             Type::Container(_) => unimplemented!(),
             Type::Array(c) => {
-                if c.length.expandable && c.length.value.is_some() {
-                    todo!()
-                }
-            
-                let len = if c.length.expandable {
-                    None
-                } else {
+                let terminator = if c.length.expandable && c.length.value.is_some() {
                     let len = c.length.value.as_ref().cloned().unwrap();
                     let r = self.alloc_register();
                     self.instructions.push(Instruction::Eval(r, len));
                     Some(r)
+                } else {
+                    None
                 };
-                
 
+                let mut len = if terminator.is_none() {
+                    match &c.length.value {
+                        Some(Expression::FieldRef(f)) if f.is_auto.get() => {
+                            let target = self.alloc_register();
+                            self.instructions.push(Instruction::GetLen(target, source));
+                            self.resolved_autos.insert(f.name.clone(), target);
+                            Some(target)
+                        },
+                        _ => None,
+                    }
+                } else {
+                    None
+                };
+
+                if len.is_none() && !c.length.expandable {
+                    len = {
+                        let len = c.length.value.as_ref().cloned().unwrap();
+                        let r = self.alloc_register();
+                        self.instructions.push(Instruction::Eval(r, len));
+                        Some(r)
+                    };
+                }
+            
                 if c.element.condition.borrow().is_none()
                     && c.element.transforms.borrow().len() == 0
+                    && terminator.is_none()
                 {
-                    match &c.element.type_ {
+                    match &*c.element.type_.borrow() {
                         // todo: const-length type optimizations for container/array/foreign
                         Type::Container(_)
                         | Type::Array(_)
@@ -305,6 +326,9 @@ impl Context {
                     len
                 };
                 self.instructions.push(Instruction::Loop(iter_index, len, drained));
+                if let Some(terminator) = terminator {
+                    self.instructions.push(Instruction::EncodePrimitiveArray(target, terminator, PrimitiveType::Scalar(ScalarType::U8), None));
+                }
             },
             Type::Enum(e) => {
                 self.instructions.push(Instruction::EncodeEnum(PrimitiveType::Scalar(e.rep.clone()), target, source));
@@ -331,7 +355,7 @@ impl Context {
                     self.instructions.push(Instruction::Eval(r, arg.clone()));
                     args.push(r);
                 }
-                if let Type::Foreign(f) = &r.target.type_ {
+                if let Type::Foreign(f) = &*r.target.type_.borrow() {
                     self.instructions.push(Instruction::EncodeForeign(target, source, f.clone(), args));
                 } else {
                     self.instructions.push(Instruction::EncodeRef(target, source, args));

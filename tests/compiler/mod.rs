@@ -5,6 +5,8 @@ use quote::quote;
 use std::io::Write;
 use std::process::Command;
 
+mod integration;
+
 pub fn rustfmt(input: &str) -> String {
     let mut proc = Command::new("rustfmt")
         .stdin(std::process::Stdio::piped())

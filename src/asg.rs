@@ -2,7 +2,7 @@ use crate::PartialType;
 use crate::{ast, AsgError, AsgResult, BinaryOp, ScalarType, Span, UnaryOp};
 use indexmap::IndexMap;
 use proc_macro2::TokenStream;
-use std::cell::RefCell;
+use std::{borrow::Cow, cell::{Cell, RefCell}};
 use std::fmt;
 use std::{
     cmp::Ordering,
@@ -20,6 +20,8 @@ pub trait ForeignType {
     fn assignable_from_partial(&self, type_: &PartialType) -> bool {
         match type_ {
             PartialType::Type(t) => self.assignable_from(t),
+            PartialType::Any => true,
+            PartialType::Scalar(Some(scalar)) => self.assignable_from(&Type::Scalar(*scalar)),
             _ => false,
         }
     }
@@ -28,7 +30,7 @@ pub trait ForeignType {
         match type_ {
             PartialType::Type(t) => self.assignable_to(t),
             PartialType::Any => true,
-            PartialType::Scalar(Some(scalar)) => self.assignable_from(&Type::Scalar(*scalar)),
+            PartialType::Scalar(Some(scalar)) => self.assignable_to(&Type::Scalar(*scalar)),
             _ => false,
         }
     }
@@ -83,16 +85,16 @@ pub struct Field {
     pub name: String,
     pub arguments: RefCell<Vec<TypeArgument>>,
     pub span: Span,
-    pub type_: Type,
+    pub type_: RefCell<Type>,
     pub condition: RefCell<Option<Expression>>,
     pub transforms: RefCell<Vec<TypeTransform>>,
     pub toplevel: bool,
-    pub is_auto: bool,
+    pub is_auto: Cell<bool>,
 }
 
 impl fmt::Display for Field {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}: {}", self.name, self.type_)?;
+        write!(f, "{}: {}", self.name, self.type_.borrow())?;
         if let Some(condition) = &*self.condition.borrow() {
             write!(f, " {{ {} }}", condition)?;
         }
@@ -108,13 +110,13 @@ impl fmt::Display for Field {
 
 impl AsgExpression for Field {
     fn get_type(&self) -> Option<Type> {
-        Some(self.type_.clone())
+        Some(self.type_.borrow().clone())
     }
 }
 
 impl PartialEq for Field {
     fn eq(&self, other: &Field) -> bool {
-        self.name == other.name && self.type_.assignable_from(&other.type_)
+        self.name == other.name && self.type_.borrow().assignable_from(&other.type_.borrow())
     }
 }
 
@@ -143,10 +145,11 @@ pub struct ContainerType {
 }
 
 impl ContainerType {
-    pub fn flatten_view(&self) -> impl Iterator<Item=(&String, &Arc<Field>)> {
-        self.items.iter().flat_map(|(name, field)| match &field.type_ {
+    //todo: optimize this
+    pub fn flatten_view<'a>(&'a self) -> impl Iterator<Item=(String, Arc<Field>)> + 'a {
+        self.items.iter().flat_map(|(name, field)| match &*field.type_.borrow() {
             Type::Container(x) => x.flatten_view().collect::<Vec<_>>(),
-            _ => vec![(name, field)]
+            _ => vec![(name.clone(), field.clone())]
         })
     }
 }
@@ -210,7 +213,7 @@ impl fmt::Display for Type {
                 }
                 write!(f, "{{\n")?;
                 for (name, field) in c.items.iter() {
-                    write!(f, "  {}: {}", name, field.type_)?;
+                    write!(f, "  {}: {}", name, field.type_.borrow())?;
                 }
                 write!(f, "\n}}\n")
             }
@@ -248,10 +251,10 @@ impl fmt::Display for Type {
 }
 
 impl Type {
-    pub fn resolved(&self) -> &Type {
+    pub fn resolved(&self) -> Cow<'_, Type> {
         match self {
-            Type::Ref(x) => x.target.type_.resolved(),
-            x => x,
+            Type::Ref(x) => Cow::Owned(x.target.type_.borrow().resolved().into_owned()),
+            x => Cow::Borrowed(x),
         }
     }
 
@@ -265,17 +268,17 @@ impl Type {
             Type::F32 => true,
             Type::F64 => true,
             Type::Bool => true,
-            Type::Ref(field) => field.target.type_.copyable(),
+            Type::Ref(field) => field.target.type_.borrow().copyable(),
         }
     }
 
     pub fn assignable_from(&self, other: &Type) -> bool {
-        match (self.resolved(), other.resolved()) {
+        match (self.resolved().as_ref(), other.resolved().as_ref()) {
             (Type::Ref(field1), Type::Ref(field2)) => {
-                field1.target.type_.assignable_from(&field2.target.type_)
+                field1.target.type_.borrow().assignable_from(&field2.target.type_.borrow())
             }
-            (Type::Ref(field), x) => field.target.type_.assignable_from(x),
-            (x, Type::Ref(field)) => x.assignable_from(&field.target.type_),
+            (Type::Ref(field), x) => field.target.type_.borrow().assignable_from(x),
+            (x, Type::Ref(field)) => x.assignable_from(&field.target.type_.borrow()),
             (t1, Type::Foreign(f2)) => f2.obj.assignable_to(t1),
             (Type::Foreign(f1), t2) => f1.obj.assignable_from(t2),
             (Type::Container(c1), Type::Container(c2)) => c1 == c2,
@@ -303,7 +306,7 @@ impl Type {
         if to.assignable_from(self) {
             return true;
         }
-        match (self.resolved(), to.resolved()) {
+        match (self.resolved().as_ref(), to.resolved().as_ref()) {
             (Type::Scalar(_), Type::Scalar(_)) => true,
             (Type::F32, Type::F64) => true,
             (Type::F64, Type::F32) => true,
@@ -437,7 +440,7 @@ impl AsgExpression for ArrayIndexExpression {
     fn get_type(&self) -> Option<Type> {
         let parent_type = self.array.get_type()?;
         match parent_type {
-            Type::Array(parent_type) => Some(parent_type.element.type_.clone()),
+            Type::Array(parent_type) => Some(parent_type.element.type_.borrow().clone()),
             _ => None,
         }
     }
@@ -452,7 +455,7 @@ pub struct EnumAccessExpression {
 
 impl AsgExpression for EnumAccessExpression {
     fn get_type(&self) -> Option<Type> {
-        match &self.enum_field.type_ {
+        match &*self.enum_field.type_.borrow() {
             Type::Enum(e) => Some(Type::Scalar(e.rep)),
             _ => None,
         }
@@ -507,16 +510,16 @@ impl AsgExpression for Expression {
                     name: "$string".to_string(),
                     arguments: RefCell::new(vec![]),
                     span: e.span,
-                    type_: Type::Scalar(ScalarType::U8),
+                    type_: RefCell::new(Type::Scalar(ScalarType::U8)),
                     condition: RefCell::new(None),
                     transforms: RefCell::new(vec![]),
                     toplevel: false,
-                    is_auto: false,
+                    is_auto: Cell::new(false),
                 }),
                 length: LengthConstraint {
                     expandable: true,
                     value: Some(Expression::Int(self::Int {
-                        value: ConstInt::U64(e.content.as_bytes().len() as u64),
+                        value: ConstInt::U64(e.content.len() as u64),
                         type_: ScalarType::U64,
                         span: e.span,
                     })),

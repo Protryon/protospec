@@ -68,7 +68,7 @@ pub fn compile_program(program: &Program, options: &CompileOptions) -> TokenStre
         impl Error for DecodeError {}
     });
     for (name, field) in program.types.iter() {
-        match &field.type_ {
+        match &*field.type_.borrow() {
             Type::Foreign(_) => continue,
             Type::Container(item) => {
                 components.push(generate_container(&name, &**item, options));
@@ -199,7 +199,7 @@ pub fn emit_type_ref(item: &Type) -> TokenStream {
         Type::Enum(_) => unimplemented!(),
         Type::Scalar(s) => emit_ident(&s.to_string()),
         Type::Array(array_type) => {
-            let interior = emit_type_ref(&array_type.element.type_);
+            let interior = emit_type_ref(&array_type.element.type_.borrow());
             quote! {
                 Vec<#interior>
             }
@@ -208,7 +208,7 @@ pub fn emit_type_ref(item: &Type) -> TokenStream {
         Type::F32 => emit_ident("f32"),
         Type::F64 => emit_ident("f64"),
         Type::Bool => emit_ident("bool"),
-        Type::Ref(field) => match &field.target.type_ {
+        Type::Ref(field) => match &*field.target.type_.borrow() {
             Type::Foreign(c) => c.obj.type_ref(),
             _ => emit_ident(&global_name(&field.target.name)),
         },
@@ -223,7 +223,7 @@ pub fn generate_container(
     let mut fields = vec![];
     for (name, field) in item.flatten_view() {
         let name_ident = format_ident!("{}", name);
-        let type_ref = emit_type_ref(&field.type_);
+        let type_ref = emit_type_ref(&field.type_.borrow());
         let type_ref = if field.condition.borrow().is_some() {
             quote! {
                 Option<#type_ref>

@@ -5,7 +5,7 @@ use std::fmt;
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token {
     Ident(String),
-    String(String),
+    String(Vec<u8>),
     Int(String),
     CommentLine(String),
     CommentBlock(String),
@@ -49,6 +49,7 @@ pub enum Token {
     Ne,
     Question,
     Colon,
+    DoubleColon,
     Semicolon,
     Plus,
     Minus,
@@ -77,7 +78,7 @@ impl fmt::Display for Token {
         use Token::*;
         match self {
             Ident(s) => write!(f, "{}", s),
-            String(s) => write!(f, "\"{}\"", s), // todo escapes
+            String(s) => write!(f, "\"{}\"", std::string::String::from_utf8_lossy(&s[..])), // todo escapes
             Int(s) => write!(f, "{}", s),
             CommentLine(s) => write!(f, "//{}\n", s),
             CommentBlock(s) => write!(f, "/*{}*/ ", s),
@@ -121,6 +122,7 @@ impl fmt::Display for Token {
             Ne => write!(f, "!= "),
             Question => write!(f, "?"),
             Colon => write!(f, ":"),
+            DoubleColon => write!(f, "::"),
             Semicolon => write!(f, ";"),
             Plus => write!(f, "+"),
             Minus => write!(f, "-"),
@@ -183,17 +185,22 @@ impl Token {
             x if x.is_ascii_whitespace() => return (&input[1..], None),
             b'"' => {
                 let mut i = 1;
-                let mut in_escape = false;
+                let mut out = vec![];
                 while i < input.len() {
-                    if !in_escape {
-                        if input[i] == b'"' {
-                            break;
+                    if input[i] == b'\\' && i < input.len() - 1 {
+                        i += 1;
+                        if input[i].is_ascii_hexdigit() {
+                            if i < input.len() - 1 && input[i + 1].is_ascii_hexdigit() {
+                                i += 1;
+                                out.push(u8::from_str_radix(std::str::from_utf8(&input[i..i + 2]).unwrap(), 16).unwrap());
+                            } else {
+                                out.push(u8::from_str_radix(std::str::from_utf8(&input[i..i + 1]).unwrap(), 16).unwrap());
+                            }
+                        } else {
+                            out.push(input[i]);
                         }
-                        if input[i] == b'\\' {
-                            in_escape = !in_escape;
-                        }
-                    } else {
-                        in_escape = false;
+                    } else if input[i] == b'"' {
+                        break;
                     }
                     i += 1;
                 }
@@ -203,7 +210,7 @@ impl Token {
                 return (
                     &input[(i + 1)..],
                     Some(Token::String(
-                        String::from_utf8_lossy(&input[1..i]).to_string(),
+                        out,
                     )),
                 );
             }
@@ -320,6 +327,8 @@ impl Token {
             b':' => {
                 if let Some(input) = eat(input, ":>") {
                     return (input, Some(Token::Cast));
+                } else if let Some(input) = eat(input, "::") {
+                    return (input, Some(Token::DoubleColon));
                 } else {
                     return (&input[1..], Some(Token::Colon));
                 }

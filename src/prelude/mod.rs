@@ -18,3 +18,6 @@ pub use gzip::*;
 
 mod var;
 pub use var::*;
+
+mod utf8;
+pub use utf8::*;

@@ -197,15 +197,35 @@ fn prepare_decode_sync(context: &Context, instructions: &[Instruction]) -> Token
                     });
                 }
             }
-            Instruction::Loop(target, stop_index, output, inner) => {
+            Instruction::Loop(target, stop_index, terminator, output, inner) => {
                 let output = emit_register(*output);
                 let inner = prepare_decode_sync(context, &inner[..]);
                 let stop = stop_index.map(emit_register);
+                let terminator = terminator.map(emit_register);
                 let target = emit_target(target);
                 if let Some(stop) = stop {
                     statements.push(quote! {
                         let mut #output = Vec::with_capacity(#stop as usize);
                         for _ in 0..#stop {
+                            #inner
+                        }
+                    });
+                } else if let Some(terminator) = terminator {
+                    statements.push(quote! {
+                        let mut #output = Vec::new();
+                        loop {
+                            let buf = #target.fill_buf()?;
+                            if buf.len() == 0 {
+                                break;
+                            }
+                            if (buf.len() < #terminator.len()) {
+                                //todo: confirm this cannot infinite loop
+                                continue;
+                            }
+                            if &buf[..#terminator.len()] == #terminator {
+                                #target.consume(#terminator.len());
+                                break;
+                            }
                             #inner
                         }
                     });
