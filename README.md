@@ -48,7 +48,7 @@ const X: u32 = 1 + 2;
 Their associated type MUST NOT have any conditions or transformations. They are generally expected to only be primitive types.
 
 ### Import Declaration
-A ProtoSpec `import` declaration can types declared from other ProtoSpec files via relative path. Code for the entire imported file will be generated.
+A ProtoSpec `import` declaration can import types declared in other ProtoSpec files via relative path. Code for the entire imported file will be generated.
 Example:
 ```
 import test_container from "test-import";
