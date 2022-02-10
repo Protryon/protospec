@@ -1,3 +1,5 @@
+import_ffi utf8 as type;
+
 type Tag = enum u8 {
     End = 0,
     Byte,
@@ -16,7 +18,7 @@ type Tag = enum u8 {
 
 type NBTString = container {
     len: u16 +auto,
-    value: u8[len],
+    value: utf8(len),
 };
 
 type IntArray = container {
@@ -46,7 +48,7 @@ type Payload(t: Tag) = container {
 type CompoundItem = container {
     type_id: Tag,
     name_len: u16 +auto,
-    name: u8[name_len],
+    name: utf8(name_len),
     payload: Payload(type_id),
 };
 

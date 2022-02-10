@@ -92,7 +92,7 @@ impl ForeignType for VarInt {
     }
 
     fn arguments(&self) -> Vec<TypeArgument> {
-        vec![]
+       vec![]
     }
 
     fn copyable(&self) -> bool {

@@ -12,7 +12,7 @@ use thiserror::Error;
 
 pub type AsgResult<T> = StdResult<T, AsgError>;
 
-#[derive(Error, Debug)]
+#[derive(Error)]
 pub enum AsgError {
     #[error("unresolved ffi import '{0}' @ {1}")]
     FfiMissing(String, Span),
@@ -70,6 +70,12 @@ pub enum AsgError {
     InvalidFlag(Span),
     #[error("unknown")]
     Unknown(#[from] crate::Error),
+}
+
+impl fmt::Debug for AsgError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self)
+    }
 }
 
 #[derive(Clone)]
@@ -447,6 +453,7 @@ impl Scope {
                         .as_ref()
                         .map(|expr| Scope::convert_expr(&sub_scope, expr, target_type.into()))
                         .transpose()?,
+                    can_resolve_auto: false,
                 });
             }
         }

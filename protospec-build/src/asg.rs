@@ -73,11 +73,12 @@ pub struct Program {
     pub transforms: IndexMap<String, Arc<Transform>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TypeArgument {
     pub name: String,
     pub type_: Type,
     pub default_value: Option<Expression>,
+    pub can_resolve_auto: bool,
 }
 
 #[derive(Debug)]
@@ -861,5 +862,27 @@ impl fmt::Display for Expression {
         //     Str(e) => e.fmt(f),
         //     Ternary(e) => e.fmt(f),
         // }
+    }
+}
+
+impl From<u64> for Int {
+    fn from(from: u64) -> Self {
+        Self {
+            value: ConstInt::U64(from),
+            type_: ScalarType::U64,
+            span: Span::default(),
+        }
+    }
+}
+
+impl From<Int> for Expression {
+    fn from(from: Int) -> Self {
+        Expression::Int(from)
+    }
+}
+
+impl From<u64> for Expression {
+    fn from(from: u64) -> Self {
+        Expression::Int(from.into())
     }
 }

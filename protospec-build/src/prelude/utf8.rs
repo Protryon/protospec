@@ -63,10 +63,12 @@ impl ForeignType for Utf8 {
     }
 
     fn arguments(&self) -> Vec<TypeArgument> {
-        vec![]
+        vec![
+            TypeArgument { name: "length".to_string(), type_: Type::Scalar(ScalarType::U64), default_value: Some(u64::MAX.into()), can_resolve_auto: true }
+        ]
     }
 
     fn copyable(&self) -> bool {
-        true
+        false
     }
 }

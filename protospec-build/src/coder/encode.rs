@@ -1,6 +1,6 @@
 use indexmap::IndexMap;
 
-use crate::{asg::*};
+use crate::asg::*;
 use std::sync::Arc;
 use super::*;
 
@@ -356,6 +356,19 @@ impl Context {
                     args.push(r);
                 }
                 if let Type::Foreign(f) = &*r.target.type_.borrow() {
+                    let arguments = f.obj.arguments();
+                    for (expr, arg) in r.arguments.iter().zip(arguments.iter()) {
+                        if arg.can_resolve_auto {
+                            match expr {
+                                Expression::FieldRef(f) if f.is_auto.get() => {
+                                    let len_target = self.alloc_register();
+                                    self.instructions.push(Instruction::GetLen(len_target, source));
+                                    self.resolved_autos.insert(f.name.clone(), len_target);
+                                },
+                                _ => (),
+                            }
+                        }
+                    }
                     self.instructions.push(Instruction::EncodeForeign(target, source, f.clone(), args));
                 } else {
                     self.instructions.push(Instruction::EncodeRef(target, source, args));

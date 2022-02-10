@@ -26,7 +26,7 @@ fn main() {
 impl fmt::Display for Compound {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for item in &self.items {
-            write!(indented(f).with_str("  "), "\n{}<{}> = {}", item.type_id, String::from_utf8_lossy(&*item.name), item.payload)?;
+            write!(indented(f).with_str("  "), "\n{}<{}> = {}", item.type_id, item.name, item.payload)?;
         }
         Ok(())
     }
@@ -77,7 +77,7 @@ impl fmt::Display for Payload {
             Payload { long: Some(long), .. } => write!(f, "{}", long)?,
             Payload { float: Some(float), .. } => write!(f, "{}", float)?,
             Payload { double: Some(double), .. } => write!(f, "{}", double)?,
-            Payload { string: Some(string), .. } => write!(f, "\"{}\"", String::from_utf8_lossy(&*string.value))?,
+            Payload { string: Some(string), .. } => write!(f, "\"{}\"", string.value)?,
             Payload { list: Some(list), .. } => write!(f, "{}", list)?,
             Payload { compound: Some(compound), .. } => write!(f, "{}", compound)?,
             Payload { int_array: Some(int_array), .. } => write!(f, "{}", int_array)?,
