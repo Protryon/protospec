@@ -11,7 +11,7 @@ impl ForeignTransform for Base64Transform {
         }
     }
 
-    fn arguments(&self) -> Vec<TransformArgument> {
+    fn arguments(&self) -> Vec<FFIArgument> {
         vec![]
     }
 

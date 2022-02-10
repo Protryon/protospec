@@ -86,6 +86,7 @@ impl_node!(FfiDeclaration);
 pub enum FfiType {
     Transform,
     Type,
+    Function
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -326,6 +327,14 @@ pub struct TernaryExpression {
 impl_node!(TernaryExpression);
 
 #[derive(Clone, Serialize, Deserialize)]
+pub struct CallExpression {
+    pub function: Ident,
+    pub arguments: Vec<Expression>,
+    pub span: Span,
+}
+impl_node!(CallExpression);
+
+#[derive(Clone, Serialize, Deserialize)]
 pub enum Expression {
     Binary(BinaryExpression),
     Unary(UnaryExpression),
@@ -337,6 +346,7 @@ pub enum Expression {
     Str(Str),
     Ternary(TernaryExpression),
     Bool(Bool),
+    Call(CallExpression),
 }
 
 impl Node for Expression {
@@ -352,6 +362,7 @@ impl Node for Expression {
             Expression::Str(x) => x.span(),
             Expression::Ternary(x) => x.span(),
             Expression::Bool(x) => x.span(),
+            Expression::Call(x) => x.span(),
         }
     }
 }

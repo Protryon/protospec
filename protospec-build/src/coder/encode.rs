@@ -25,8 +25,8 @@ pub enum Instruction {
 
     // register representing iterator from -> term, term, inner
     Loop(usize, usize, Vec<Instruction>),
-    // len target <- buffer
-    GetLen(usize, usize),
+    // len target <- buffer, cast_type
+    GetLen(usize, usize, Option<ScalarType>),
     Drop(usize),
     // original, checked, message
     NullCheck(usize, usize, String),
@@ -167,8 +167,14 @@ impl Context {
                 if let Some(length) = &c.length {
                     match length {
                         Expression::FieldRef(f) if f.is_auto.get() => {
+                            let type_ = f.type_.borrow();
+                            let cast_type = match &*type_ {
+                                Type::Scalar(s) => s,
+                                _ => unimplemented!("bad type for auto field"),
+                            };
+
                             let target = self.alloc_register();
-                            self.instructions.push(Instruction::GetLen(target, buf_target.unwrap_buf()));
+                            self.instructions.push(Instruction::GetLen(target, buf_target.unwrap_buf(), Some(*cast_type)));
                             self.resolved_autos.insert(f.name.clone(), target);
                         },
                         _ => (),
@@ -234,8 +240,14 @@ impl Context {
                 let mut len = if terminator.is_none() {
                     match &c.length.value {
                         Some(Expression::FieldRef(f)) if f.is_auto.get() => {
+                            let type_ = f.type_.borrow();
+                            let cast_type = match &*type_ {
+                                Type::Scalar(s) => s,
+                                _ => unimplemented!("bad type for auto field"),
+                            };
+
                             let target = self.alloc_register();
-                            self.instructions.push(Instruction::GetLen(target, source));
+                            self.instructions.push(Instruction::GetLen(target, source, Some(*cast_type)));
                             self.resolved_autos.insert(f.name.clone(), target);
                             Some(target)
                         },
@@ -322,7 +334,7 @@ impl Context {
                     len
                 } else {
                     let len = self.alloc_register();
-                    self.instructions.push(Instruction::GetLen(len, source));
+                    self.instructions.push(Instruction::GetLen(len, source, None));
                     len
                 };
                 self.instructions.push(Instruction::Loop(iter_index, len, drained));
@@ -361,8 +373,14 @@ impl Context {
                         if arg.can_resolve_auto {
                             match expr {
                                 Expression::FieldRef(f) if f.is_auto.get() => {
+                                    let type_ = f.type_.borrow();
+                                    let cast_type = match &*type_ {
+                                        Type::Scalar(s) => s,
+                                        _ => unimplemented!("bad type for auto field"),
+                                    };
+
                                     let len_target = self.alloc_register();
-                                    self.instructions.push(Instruction::GetLen(len_target, source));
+                                    self.instructions.push(Instruction::GetLen(len_target, source, Some(*cast_type)));
                                     self.resolved_autos.insert(f.name.clone(), len_target);
                                 },
                                 _ => (),

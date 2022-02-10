@@ -1,0 +1,8 @@
+import_ffi len as function;
+import_ffi utf8 as type;
+
+type TestContainer = container {
+    name_len: u16 +auto,
+    name: utf8(name_len),
+    int1: u16 {len(name) > 16},
+};

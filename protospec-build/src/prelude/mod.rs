@@ -21,3 +21,6 @@ pub use var::*;
 
 mod utf8;
 pub use utf8::*;
+
+mod len;
+pub use len::*;

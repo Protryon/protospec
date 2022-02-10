@@ -39,10 +39,10 @@ impl ForeignTransform for TestTransform {
         }
     }
 
-    fn arguments(&self) -> Vec<TransformArgument> {
-        vec![TransformArgument {
+    fn arguments(&self) -> Vec<FFIArgument> {
+        vec![FFIArgument {
             name: "offset".to_string(),
-            type_: asg::Type::Scalar(ScalarType::U8),
+            type_: Some(asg::Type::Scalar(ScalarType::U8)),
             optional: true,
         }]
     }
@@ -150,6 +150,10 @@ impl ImportResolver for TestImportResolver {
             _ => None,
         })
     }
+
+    fn resolve_ffi_function(&self, name: &str) -> Result<Option<ForeignFunctionObj>> {
+        Ok(None)
+    }
 }
 
 pub struct MockImportResolver(IndexMap<String, String>);
@@ -175,5 +179,9 @@ impl ImportResolver for MockImportResolver {
             "test_type" => Some(Box::new(TestType)),
             _ => None,
         })
+    }
+
+    fn resolve_ffi_function(&self, name: &str) -> Result<Option<ForeignFunctionObj>> {
+        Ok(None)
     }
 }

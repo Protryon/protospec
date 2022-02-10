@@ -29,4 +29,11 @@ impl<T: ImportResolver + 'static> ImportResolver for PreludeImportResolver<T> {
             x => self.0.resolve_ffi_type(x)?,
         })
     }
+
+    fn resolve_ffi_function(&self, name: &str) -> Result<Option<ForeignFunctionObj>> {
+        Ok(match name {
+            "len" => Some(Box::new(LenFunction)),
+            x => self.0.resolve_ffi_function(x)?,
+        })
+    }
 }

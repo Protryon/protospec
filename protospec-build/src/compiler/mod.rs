@@ -294,7 +294,7 @@ pub fn generate_enum(name: &str, item: &EnumType, options: &CompileOptions) -> T
 
 fn emit_arguments<F: Fn(&Arc<Field>) -> TokenStream>(
     arguments: &[Expression],
-    transform_arguments: &[TransformArgument],
+    transform_arguments: &[FFIArgument],
     ref_resolver: &F,
 ) -> TokenStream {
     let mut args_emitted = vec![];

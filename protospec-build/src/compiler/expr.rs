@@ -232,6 +232,9 @@ pub fn eval_const_expression(expr: &Expression) -> Option<ConstValue> {
             }
         }
         Bool(c) => Some(ConstValue::Bool(*c)),
+        Call(c) => {
+            unimplemented!("cannot call ffi in constant");
+        }
     }
 }
 
@@ -360,6 +363,25 @@ pub fn emit_expression<F: Fn(&Arc<Field>) -> TokenStream>(
             quote! {
                 #c
             }
+        }
+        Call(c) => {
+            let mut arguments = vec![];
+            for argument in &c.arguments {
+                let expression = emit_expression(argument, ref_resolver);
+                arguments.push(FFIArgumentValue {
+                    type_: argument.get_type().expect("missing type in ffi argument"),
+                    present: true,
+                    value: expression,
+                });
+            }
+            for argument in c.function.arguments[c.arguments.len()..].iter() {
+                arguments.push(FFIArgumentValue {
+                    type_: argument.type_.clone().unwrap_or(Type::Bool),
+                    present: false,
+                    value: quote! {},
+                });
+            }
+            c.function.inner.call(&arguments[..])
         }
     }
 }

@@ -17,6 +17,7 @@ pub enum Token {
     From,
     ImportFfi,
     Transform,
+    Function,
     Const,
     DotDot,
     Dot,
@@ -90,6 +91,7 @@ impl fmt::Display for Token {
             From => write!(f, "from "),
             ImportFfi => write!(f, "import_ffi "),
             Transform => write!(f, "transform "),
+            Function => write!(f, "function "),
             Const => write!(f, "const "),
             DotDot => write!(f, ".. "),
             Dot => write!(f, ". "),
@@ -389,6 +391,7 @@ impl Token {
                     "u64" => Token::U64,
                     "u128" => Token::U128,
                     "transform" => Token::Transform,
+                    "function" => Token::Function,
                     "const" => Token::Const,
                     "container" => Token::Container,
                     "f32" => Token::F32,
@@ -555,6 +558,7 @@ mod tests {
         i8
         u8
         transform
+        function
         const/*
 
         test block*/container
@@ -576,7 +580,7 @@ mod tests {
         }
         assert_eq!(
             output,
-            r#"test_ident"string""str\"ing""str\\ing"12345-12345type as import import_ffi i8 u8 transform const /*
+            r#"test_ident"string""str\"ing""str\\ing"12345-12345type as import import_ffi i8 u8 transform function const /*
 
         test block*/ container f32 f64 enum true false bool from ,;:?[]{}< > ?+-/ *%.. <= >= = == != ! ()// test$
 :> || && | ^| >> << >>> ~. ?: //

@@ -296,7 +296,7 @@ fn parse_ffi_declaration(t: &mut TokenIter) -> ParseResult<FfiDeclaration> {
     let start = t.expect(Token::ImportFfi)?;
     let name = t.expect_ident()?;
     t.expect(Token::As)?;
-    let typ = t.expect_oneof(&[Token::Transform, Token::Type])?;
+    let typ = t.expect_oneof(&[Token::Transform, Token::Type, Token::Function])?;
 
     Ok(FfiDeclaration {
         span: start + typ.span,
@@ -304,6 +304,7 @@ fn parse_ffi_declaration(t: &mut TokenIter) -> ParseResult<FfiDeclaration> {
         ffi_type: match typ.token {
             Token::Transform => FfiType::Transform,
             Token::Type => FfiType::Type,
+            Token::Function => FfiType::Function,
             _ => unimplemented!(),
         },
     })
@@ -355,6 +356,25 @@ fn parse_scalar_type(t: &mut TokenIter) -> Option<ScalarType> {
     })
 }
 
+
+fn parse_arguments(t: &mut TokenIter, span: &mut Span) -> ParseResult<Vec<Expression>> {
+    let mut arguments = vec![];
+    if t.eat(Token::LeftParen).is_some() {
+        loop {
+            if let Some(token) = t.eat(Token::RightParen) {
+                *span = *span + token.span;
+                break;
+            }
+            arguments.push(parse_expression(t)?);
+            if t.eat(Token::Comma).is_none() {
+                *span = *span + t.expect(Token::RightParen)?;
+                break;
+            }
+        }
+    }
+    Ok(arguments)
+}
+
 fn parse_type(t: &mut TokenIter, direct_array: bool) -> ParseResult<Type> {
     let start = t.peek_span()?;
 
@@ -373,20 +393,7 @@ fn parse_type(t: &mut TokenIter, direct_array: bool) -> ParseResult<Type> {
                     Token::Ident(name) => {
                         let name = Ident { name, span };
                         let mut span = name.span;
-                        let mut arguments = vec![];
-                        if t.eat(Token::LeftParen).is_some() {
-                            loop {
-                                if let Some(token) = t.eat(Token::RightParen) {
-                                    span = span + token.span;
-                                    break;
-                                }
-                                arguments.push(parse_expression(t)?);
-                                if t.eat(Token::Comma).is_none() {
-                                    span = span + t.expect(Token::RightParen)?;
-                                    break;
-                                }
-                            }
-                        }
+                        let arguments = parse_arguments(t, &mut span)?;
                         RawType::Ref(TypeCall {
                             name,
                             arguments,
@@ -908,7 +915,17 @@ fn parse_primary_expression(t: &mut TokenIter) -> ParseResult<Expression> {
                     variant,
                 })
             } else {
-                Expression::Ref(ident)
+                if t.peek_token(Token::LeftParen)? {
+                    let mut span = span;
+                    let arguments = parse_arguments(t, &mut span)?;
+                    Expression::Call(CallExpression {
+                        function: ident,
+                        arguments,
+                        span,
+                    })
+                } else {
+                    Expression::Ref(ident)
+                }
             }
         }
         Token::LeftParen => {

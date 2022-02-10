@@ -1,5 +1,5 @@
 use crate::asg::{ForeignTransformObj, ForeignTypeObj};
-use crate::result::*;
+use crate::{result::*, ForeignFunctionObj};
 
 pub trait ImportResolver {
     fn normalize_import(&self, import: &str) -> Result<String>;
@@ -9,6 +9,8 @@ pub trait ImportResolver {
     fn resolve_ffi_transform(&self, name: &str) -> Result<Option<ForeignTransformObj>>;
 
     fn resolve_ffi_type(&self, name: &str) -> Result<Option<ForeignTypeObj>>;
+
+    fn resolve_ffi_function(&self, name: &str) -> Result<Option<ForeignFunctionObj>>;
 }
 
 pub struct NullImportResolver;
@@ -27,6 +29,10 @@ impl ImportResolver for NullImportResolver {
     }
 
     fn resolve_ffi_type(&self, _type: &str) -> Result<Option<ForeignTypeObj>> {
+        Err(protospec_err!("null import resolver"))
+    }
+
+    fn resolve_ffi_function(&self, _type: &str) -> Result<Option<ForeignFunctionObj>> {
         Err(protospec_err!("null import resolver"))
     }
 }

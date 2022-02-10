@@ -206,11 +206,19 @@ fn prepare_encode_sync(instructions: &[Instruction]) -> TokenStream {
                     }
                 });
             }
-            Instruction::GetLen(len, source) => {
+            Instruction::GetLen(len, source, cast_type) => {
                 let len = emit_register(*len);
                 let source = emit_register(*source);
+                let cast = if let Some(cast_type) = cast_type {
+                    let cast_type = emit_ident(&cast_type.to_string());
+                    quote! {
+                        as #cast_type
+                    }
+                } else {
+                    quote!{}
+                };
                 statements.push(quote! {
-                    let #len = #source.len();
+                    let #len = #source.len() #cast;
                 });
             }
             Instruction::NullCheck(target, destination, message) => {

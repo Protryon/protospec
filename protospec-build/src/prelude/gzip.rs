@@ -15,7 +15,7 @@ impl ForeignTransform for GzipTransform {
         }
     }
 
-    fn arguments(&self) -> Vec<TransformArgument> {
+    fn arguments(&self) -> Vec<FFIArgument> {
         vec![]
     }
 }

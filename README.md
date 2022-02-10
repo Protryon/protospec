@@ -165,10 +165,10 @@ Example implementation:
 
 ## Supported Backends
 * Rust
-  * Include `protospec` as a build-dependency and call `protospec::compile_spec` in your `build.rs`:
+  * Include `protospec_build` as a build-dependency and call `protospec_build::compile_spec` in your `build.rs`:
   ```
     fn main() {
-        protospec::compile_spec("example_spec", include_str!("./spec/example_spec.pspec"), &protospec::Options {
+        protospec_build::compile_spec("example_spec", include_str!("./spec/example_spec.pspec"), &protospec_build::Options {
             ..Default::default()
         }).expect("failed to build example_spec.pspec");
     }
@@ -179,8 +179,6 @@ Example implementation:
 
 ## Features in planning
 * `async`/tokio support
-* ffi for conditionals/exprs
 * generics for types
 * support array-interior transformations & conditions in ASG
 * add ability to reference original field in transform
-* add get-length builtin function or operator for use in conditionals

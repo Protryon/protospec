@@ -26,6 +26,8 @@ pub enum AsgError {
     TypeRedefinition(String, Span, Span),
     #[error("transform name already in use: '{0}' @ {1}, originally declared at {2}")]
     TransformRedefinition(String, Span, Span),
+    #[error("function name already in use: '{0}' @ {1}, originally declared at {2}")]
+    FunctionRedefinition(String, Span, Span),
     #[error("const name already in use: '{0}' @ {1}, originally declared at {2}")]
     ConstRedefinition(String, Span, Span),
     #[error("const cannot declare complex type: '{0}' @ {1}")]
@@ -44,6 +46,8 @@ pub enum AsgError {
     UnresolvedVar(String, Span),
     #[error("referenced transform '{0}' @ {1} not found")]
     UnresolvedTransform(String, Span),
+    #[error("referenced function '{0}' @ {1} not found")]
+    UnresolvedFunction(String, Span),
     #[error("referenced transform '{0}' @ {1} cannot encode type {2}")]
     InvalidTransformInput(String, Span, String),
     #[error("referenced transform '{0}' @ {1} cannot cannot have condition because its target encoding type is not assignable to its input encoding type: {2} != {3}")]
@@ -58,8 +62,8 @@ pub enum AsgError {
     UninferredType(Span),
     #[error("could not parse int {0} @ {1}")]
     InvalidInt(String, Span),
-    #[error("invalid number of arguments for transform, expected {0} to {1} arguments, got {2}")]
-    InvalidTransformArgumentCount(usize, usize, usize, Span),
+    #[error("invalid number of arguments for ffi, expected {0} to {1} arguments, got {2}")]
+    InvalidFFIArgumentCount(usize, usize, usize, Span),
     #[error("invalid number of arguments for type, expected {0} to {1} arguments, got {2}")]
     InvalidTypeArgumentCount(usize, usize, usize, Span),
     #[error("cannot have required arguments after optional arguments for type")]
@@ -204,6 +208,7 @@ impl Program {
             types: IndexMap::new(),
             consts: IndexMap::new(),
             transforms: IndexMap::new(),
+            functions: IndexMap::new(),
         }));
 
         {
@@ -318,6 +323,33 @@ impl Program {
                                     ));
                                 }
                             }
+                            ast::FfiType::Function => {
+                                if let Some(obj) = resolver.resolve_ffi_function(&ffi.name.name)? {
+                                    if let Some(defined) =
+                                        program.borrow().functions.get(&ffi.name.name)
+                                    {
+                                        return Err(AsgError::FunctionRedefinition(
+                                            ffi.name.name.clone(),
+                                            ffi.span,
+                                            defined.span,
+                                        ));
+                                    }
+                                    program.borrow_mut().functions.insert(
+                                        ffi.name.name.clone(),
+                                        Arc::new(Function {
+                                            name: ffi.name.name.clone(),
+                                            span: ffi.span.clone(),
+                                            arguments: obj.arguments(),
+                                            inner: obj,
+                                        }),
+                                    );
+                                } else {
+                                    return Err(AsgError::FfiMissing(
+                                        ffi.name.name.clone(),
+                                        ffi.span,
+                                    ));
+                                }
+                            }
                         }
                     }
                     ast::Declaration::Const(cons) => {
@@ -418,6 +450,43 @@ impl Scope {
         }
     }
 
+    fn convert_ffi_arguments(
+        self_: &Arc<RefCell<Scope>>,
+        name: &str,
+        span: Span,
+        arguments: &[ast::Expression],
+        type_arguments: &[FFIArgument],
+    ) -> AsgResult<Vec<Expression>> {
+        let min_arg_count = type_arguments
+            .iter()
+            .filter(|x| !x.optional)
+            .count();
+        // optionals MUST be at the end
+        if min_arg_count < arguments.len()
+            && type_arguments[type_arguments.len() - min_arg_count..]
+                .iter()
+                .any(|x| !x.optional)
+        {
+            unimplemented!("cannot have ffi transform with required arguments after optional arguments for '{}'", name);
+        }
+        if arguments.len() < min_arg_count || arguments.len() > type_arguments.len() {
+            return Err(AsgError::InvalidFFIArgumentCount(
+                min_arg_count,
+                type_arguments.len(),
+                arguments.len(),
+                span,
+            ));
+        }
+        let arguments = arguments
+            .iter()
+            .zip(type_arguments.iter())
+            .map(|(expr, argument)| {
+                Scope::convert_expr(self_, expr, argument.type_.clone().map(|x| x.into()).unwrap_or_else(|| PartialType::Any))
+            })
+            .collect::<AsgResult<Vec<Expression>>>()?;
+        Ok(arguments)
+    }
+
     fn convert_ast_field(
         self_: &Arc<RefCell<Scope>>,
         field: &ast::Field,
@@ -486,34 +555,7 @@ impl Scope {
             } else {
                 return Err(AsgError::UnresolvedTransform(name.name.clone(), name.span));
             };
-            let min_arg_count = def_transform
-                .arguments
-                .iter()
-                .filter(|x| !x.optional)
-                .count();
-            // optionals MUST be at the end
-            if min_arg_count < arguments.len()
-                && def_transform.arguments[def_transform.arguments.len() - min_arg_count..]
-                    .iter()
-                    .any(|x| !x.optional)
-            {
-                unimplemented!("cannot have ffi transform with required arguments after optional arguments for '{}'", def_transform.name);
-            }
-            if arguments.len() < min_arg_count || arguments.len() > def_transform.arguments.len() {
-                return Err(AsgError::InvalidTransformArgumentCount(
-                    min_arg_count,
-                    def_transform.arguments.len(),
-                    arguments.len(),
-                    *span,
-                ));
-            }
-            let arguments = arguments
-                .iter()
-                .zip(def_transform.arguments.iter())
-                .map(|(expr, argument)| {
-                    Scope::convert_expr(self_, expr, argument.type_.clone().into())
-                })
-                .collect::<AsgResult<Vec<Expression>>>()?;
+            let arguments = Self::convert_ffi_arguments(self_, &*def_transform.name, *span, &arguments[..], &def_transform.arguments[..])?;
 
             transforms.push(TypeTransform {
                 transform: def_transform,
@@ -1026,7 +1068,22 @@ impl Scope {
                     if_false: Box::new(if_false),
                     span: expr.span,
                 })
-            }
+            },
+            Call(call) => {
+                let scope = self_.borrow();
+
+                let function = scope.program.borrow().functions.get(&*call.function.name)
+                    .ok_or_else(|| AsgError::UnresolvedFunction(call.function.name.clone(), call.function.span))?
+                    .clone();
+                
+                let arguments = Self::convert_ffi_arguments(self_, &*function.name, call.span, &call.arguments[..], &function.arguments[..])?;
+                
+                Expression::Call(CallExpression {
+                    function,
+                    arguments,
+                    span: call.span,
+                })
+            },
         })
     }
 

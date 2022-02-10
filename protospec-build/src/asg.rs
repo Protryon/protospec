@@ -63,7 +63,17 @@ pub trait ForeignTransform {
 
     fn encoding_sync_gen(&self, input_stream: TokenStream, arguments: Vec<TokenStream>) -> TokenStream;
 
-    fn arguments(&self) -> Vec<TransformArgument>;
+    fn arguments(&self) -> Vec<FFIArgument>;
+}
+
+pub type ForeignFunctionObj = Box<dyn ForeignFunction + Send + Sync + 'static>;
+
+pub trait ForeignFunction {
+    fn arguments(&self) -> Vec<FFIArgument>;
+
+    fn return_type(&self) -> Type;
+
+    fn call(&self, arguments: &[FFIArgumentValue]) -> TokenStream;
 }
 
 #[derive(Debug)]
@@ -71,6 +81,7 @@ pub struct Program {
     pub types: IndexMap<String, Arc<Field>>,
     pub consts: IndexMap<String, Arc<Const>>,
     pub transforms: IndexMap<String, Arc<Transform>>,
+    pub functions: IndexMap<String, Arc<Function>>,
 }
 
 #[derive(Debug, Clone)]
@@ -357,17 +368,23 @@ impl AsgExpression for Input {
     }
 }
 
-pub struct TransformArgument {
+pub struct FFIArgument {
     pub name: String,
-    pub type_: Type,
+    pub type_: Option<Type>,
     pub optional: bool,
+}
+
+pub struct FFIArgumentValue {
+    pub type_: Type,
+    pub present: bool,
+    pub value: TokenStream,
 }
 
 pub struct Transform {
     pub name: String,
     pub span: Span,
     pub inner: ForeignTransformObj,
-    pub arguments: Vec<TransformArgument>,
+    pub arguments: Vec<FFIArgument>,
 }
 
 impl fmt::Debug for Transform {
@@ -378,6 +395,25 @@ impl fmt::Debug for Transform {
 
 impl PartialEq for Transform {
     fn eq(&self, other: &Transform) -> bool {
+        self.name == other.name
+    }
+}
+
+pub struct Function {
+    pub name: String,
+    pub span: Span,
+    pub inner: ForeignFunctionObj,
+    pub arguments: Vec<FFIArgument>,
+}
+
+impl fmt::Debug for Function {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} @ {}", self.name, self.span)
+    }
+}
+
+impl PartialEq for Function {
+    fn eq(&self, other: &Function) -> bool {
         self.name == other.name
     }
 }
@@ -478,6 +514,19 @@ impl AsgExpression for TernaryExpression {
 }
 
 #[derive(PartialEq, Clone, Debug)]
+pub struct CallExpression {
+    pub function: Arc<Function>,
+    pub arguments: Vec<Expression>,
+    pub span: Span,
+}
+
+impl AsgExpression for CallExpression {
+    fn get_type(&self) -> Option<Type> {
+        Some(self.function.inner.return_type())
+    }
+}
+
+#[derive(PartialEq, Clone, Debug)]
 pub enum Expression {
     Binary(BinaryExpression),
     Unary(UnaryExpression),
@@ -491,6 +540,7 @@ pub enum Expression {
     Str(ast::Str),
     Ternary(TernaryExpression),
     Bool(bool),
+    Call(CallExpression),
 }
 
 impl AsgExpression for Expression {
@@ -528,6 +578,7 @@ impl AsgExpression for Expression {
             }))),
             Ternary(e) => e.get_type(),
             Bool(_) => Some(Type::Bool),
+            Call(ffi) => ffi.get_type(),
         }
     }
 }
