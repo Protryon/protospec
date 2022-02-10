@@ -1,0 +1,61 @@
+type Tag = enum u8 {
+    End = 0,
+    Byte,
+    Short,
+    Int,
+    Long,
+    Float,
+    Double,
+    ByteArray,
+    String,
+    List,
+    Compound,
+    IntArray,
+    LongArray,
+};
+
+type NBTString = container {
+    len: u16 +auto,
+    value: u8[len],
+};
+
+type IntArray = container {
+    len: i32 +auto,
+    value: i32[len],
+};
+
+type LongArray = container {
+    len: i32 +auto,
+    value: i64[len],
+};
+
+type Payload(t: Tag) = container {
+    byte: i8 {t == Tag::Byte},
+    short: i16 {t == Tag::Short},
+    int: i32 {t == Tag::Int},
+    long: i64 {t == Tag::Long},
+    float: f32 {t == Tag::Float},
+    double: f64 {t == Tag::Double},
+    string: NBTString {t == Tag::String},
+    list: List {t == Tag::List},
+    compound: Compound {t == Tag::Compound},
+    int_array: IntArray {t == Tag::IntArray},
+    long_array: LongArray {t == Tag::LongArray},
+};
+
+type CompoundItem = container {
+    type_id: Tag,
+    name_len: u16 +auto,
+    name: u8[name_len],
+    payload: Payload(type_id),
+};
+
+type Compound = container {
+    items: CompoundItem[.."\0"]
+};
+
+type List = container {
+    type_id: Tag,
+    length: i32 +auto,
+    items: Payload(type_id)[length],
+};

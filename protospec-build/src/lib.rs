@@ -28,8 +28,6 @@ pub use import::*;
 pub mod compiler;
 pub use compiler::*;
 
-// pub mod decoder;
-
 pub mod coder;
 
 pub mod prelude;
