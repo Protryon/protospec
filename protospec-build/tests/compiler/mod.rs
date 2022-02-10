@@ -1,6 +1,6 @@
 use crate::*;
 use proc_macro2::TokenStream;
-use protospec::asg::Program;
+use protospec_build::asg::Program;
 use quote::quote;
 use std::io::Write;
 use std::process::Command;
