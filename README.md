@@ -178,7 +178,6 @@ Example implementation:
 
 
 ## Features in planning
-* `async`/tokio support
 * generics for types
 * support array-interior transformations & conditions in ASG
 * add ability to reference original field in transform
