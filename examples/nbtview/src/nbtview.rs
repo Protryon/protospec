@@ -4,7 +4,7 @@ pub mod nbt {
 }
 use nbt::*;
 
-use std::{io::BufReader, fs::File, fmt, fmt::Write};
+use std::{fmt, fmt::Write};
 
 use clap::Parser;
 use indenter::indented;
@@ -15,11 +15,22 @@ struct Args {
     input: String,
 }
 
+#[cfg(not(feature = "async"))]
 fn main() {
     let args = Args::parse();
-    let file = File::open(&*args.input).expect("failed to open file");
-    let mut file_reader = BufReader::new(file);
+    let file = std::fs::File::open(&*args.input).expect("failed to open file");
+    let mut file_reader = std::io::BufReader::new(file);
     let nbt = nbt::Compound::decode_sync(&mut file_reader).expect("failed to decode nbt");
+    println!("{}", nbt);
+}
+
+#[cfg(feature = "async")]
+#[tokio::main]
+async fn main() {
+    let args = Args::parse();
+    let file = tokio::fs::File::open(&*args.input).await.expect("failed to open file");
+    let mut file_reader = tokio::io::BufReader::new(file);
+    let nbt = nbt::Compound::decode_async(&mut file_reader).await.expect("failed to decode nbt");
     println!("{}", nbt);
 }
 

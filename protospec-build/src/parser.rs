@@ -356,7 +356,6 @@ fn parse_scalar_type(t: &mut TokenIter) -> Option<ScalarType> {
     })
 }
 
-
 fn parse_arguments(t: &mut TokenIter, span: &mut Span) -> ParseResult<Vec<Expression>> {
     let mut arguments = vec![];
     if t.eat(Token::LeftParen).is_some() {
@@ -830,9 +829,7 @@ fn parse_multiply_expression(t: &mut TokenIter) -> ParseResult<Expression> {
 
 fn parse_cast_expression(t: &mut TokenIter) -> ParseResult<Expression> {
     let mut expr = parse_unary_expression(t)?;
-    while let Some(SpannedToken { token: op, .. }) =
-        t.eat_any(&[Token::Cast, Token::Elvis])
-    {
+    while let Some(SpannedToken { token: op, .. }) = t.eat_any(&[Token::Cast, Token::Elvis]) {
         match op {
             Token::Cast => {
                 let right = parse_type(t, true)?;
@@ -840,8 +837,8 @@ fn parse_cast_expression(t: &mut TokenIter) -> ParseResult<Expression> {
                     span: *expr.span() + right.span,
                     inner: Box::new(expr),
                     type_: right,
-                })        
-            },
+                })
+            }
             Token::Elvis => {
                 let right = parse_unary_expression(t)?;
                 expr = Expression::Binary(BinaryExpression {
@@ -850,7 +847,7 @@ fn parse_cast_expression(t: &mut TokenIter) -> ParseResult<Expression> {
                     left: Box::new(expr),
                     right: Box::new(right),
                 })
-            },
+            }
             _ => unimplemented!(),
         }
     }

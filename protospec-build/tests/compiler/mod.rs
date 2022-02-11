@@ -75,6 +75,7 @@ fn compile_test_program(program: &Program, test: TokenStream) -> String {
             "Debug".to_string(),
             "Clone".to_string(),
         ],
+        include_async: false,
     };
     let compiled = compiler::compile_program(&program, &options);
     let compiled_test = quote! {

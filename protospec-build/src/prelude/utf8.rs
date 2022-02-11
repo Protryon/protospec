@@ -1,5 +1,3 @@
-use crate::{PartialType, emit_type_ref};
-
 use super::*;
 
 pub struct Utf8;
@@ -10,7 +8,7 @@ impl ForeignType for Utf8 {
             Type::Array(inner) => {
                 let inner = inner.element.type_.borrow();
                 Type::Scalar(ScalarType::U8).assignable_from(&*inner)
-            },
+            }
             _ => false,
         }
     }
@@ -23,7 +21,14 @@ impl ForeignType for Utf8 {
         quote! { String }
     }
 
-    fn decoding_sync_gen(&self, source: TokenStream, output_ref: TokenStream, arguments: Vec<TokenStream>) -> TokenStream {
+    fn decoding_gen(
+        &self,
+        source: TokenStream,
+        output_ref: TokenStream,
+        arguments: Vec<TokenStream>,
+        is_async: bool,
+    ) -> TokenStream {
+        let async_ = map_async(is_async);
         if let Some(len) = arguments.first() {
             quote! {
                 let #output_ref = {
@@ -36,7 +41,7 @@ impl ForeignType for Utf8 {
                         let ptr = t.as_ptr() as *mut u8;
                         slice::from_raw_parts_mut(ptr, len)
                     };
-                    #source.read_exact(&mut t_borrow2[..])?;
+                    #source.read_exact(&mut t_borrow2[..])#async_?;
                     String::from_utf8(t)?
                 };
             }
@@ -44,7 +49,7 @@ impl ForeignType for Utf8 {
             quote! {
                 let #output_ref = {
                     let mut t: Vec<u8> = vec![];
-                    #source.read_until(0u8, &mut t)?;
+                    #source.read_until(0u8, &mut t)#async_?;
                     if t.len() > 0 && t[t.len() - 1] == 0u8 {
                         t.truncate(t.len() - 1);
                     }
@@ -54,21 +59,36 @@ impl ForeignType for Utf8 {
         }
     }
 
-    fn encoding_sync_gen(&self, target: TokenStream, field_ref: TokenStream, arguments: Vec<TokenStream>) -> TokenStream {
-        quote! {
-            {
-                #target.write_all(#field_ref.as_bytes())?;
+    fn encoding_gen(
+        &self,
+        target: TokenStream,
+        field_ref: TokenStream,
+        arguments: Vec<TokenStream>,
+        is_async: bool,
+    ) -> TokenStream {
+        let async_ = map_async(is_async);
+        if let Some(_) = arguments.first() {
+            quote! {
+                {
+                    #target.write_all(#field_ref.as_bytes())#async_?;
+                }
+            }
+        } else {
+            quote! {
+                {
+                    #target.write_all(#field_ref.as_bytes())#async_?;
+                    #target.write_all(&[0u8])#async_?;
+                }
             }
         }
     }
 
     fn arguments(&self) -> Vec<TypeArgument> {
-        vec![
-            TypeArgument { name: "length".to_string(), type_: Type::Scalar(ScalarType::U64), default_value: Some(u64::MAX.into()), can_resolve_auto: true }
-        ]
-    }
-
-    fn copyable(&self) -> bool {
-        false
+        vec![TypeArgument {
+            name: "length".to_string(),
+            type_: Type::Scalar(ScalarType::U64),
+            default_value: Some(u64::MAX.into()),
+            can_resolve_auto: true,
+        }]
     }
 }

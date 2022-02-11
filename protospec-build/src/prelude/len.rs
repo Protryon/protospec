@@ -11,7 +11,7 @@ impl LenFunction {
                 quote! {
                     #size
                 }
-            },
+            }
             Type::F32 => quote! { 4u64 },
             Type::F64 => quote! { 8u64 },
             Type::Bool => quote! { 1u64 },
@@ -20,28 +20,24 @@ impl LenFunction {
                 quote! {
                     #size
                 }
-            },
+            }
             Type::Array(_) | Type::Foreign(_) => {
                 quote! {
                     (#value).len() as u64
                 }
-            },
-            Type::Ref(type_call) => {
-                self.len(&*type_call.target.type_.borrow(), value)
-            },
+            }
+            Type::Ref(type_call) => self.len(&*type_call.target.type_.borrow(), value),
         }
     }
 }
 
 impl ForeignFunction for LenFunction {
     fn arguments(&self) -> Vec<FFIArgument> {
-        vec![
-            FFIArgument {
-                name: "list".to_string(),
-                type_: None,
-                optional: false,
-            }
-        ]
+        vec![FFIArgument {
+            name: "list".to_string(),
+            type_: None,
+            optional: false,
+        }]
     }
 
     fn return_type(&self) -> Type {

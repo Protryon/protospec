@@ -1,6 +1,6 @@
 use super::*;
 use crate::coder::decode::*;
-use crate::coder::*;
+use crate::{coder::*, map_async};
 
 fn emit_target(target: &Target) -> TokenStream {
     match target {
@@ -9,18 +9,41 @@ fn emit_target(target: &Target) -> TokenStream {
         Target::Buf(x) => {
             let buf = emit_register(*x);
             quote! { (&mut #buf) }
-        },
+        }
     }
 }
 
-fn prepare_decode_sync(context: &Context, instructions: &[Instruction]) -> TokenStream {
+fn prepare_decode(
+    context: &Context,
+    instructions: &[Instruction],
+    is_async: bool,
+    is_root: bool,
+) -> TokenStream {
+    let async_ = map_async(is_async);
     let mut statements = vec![];
+    if is_root {
+        if is_async {
+            statements.push(quote! {
+                use tokio::io::{ AsyncRead, AsyncBufRead, AsyncBufReadExt, AsyncReadExt };
+            })
+        } else {
+            statements.push(quote! {
+                use std::io::Read;
+            })
+        }
+    }
+
     for instruction in instructions.iter() {
         match instruction {
             Instruction::Eval(target, expr) => {
                 let target = emit_register(*target);
                 let value = emit_expression(expr, &|field| {
-                    emit_register(*context.field_register_map.get(&field.name).expect("missing register for field"))
+                    emit_register(
+                        *context
+                            .field_register_map
+                            .get(&field.name)
+                            .expect("missing register for field"),
+                    )
                 });
                 statements.push(quote! {
                     let #target = #value;
@@ -28,20 +51,30 @@ fn prepare_decode_sync(context: &Context, instructions: &[Instruction]) -> Token
             }
             Instruction::Construct(target, Constructable::Tuple(items)) => {
                 let target = emit_register(*target);
-                let items = flatten(items.iter().map(|x| {
-                    let x = emit_register(*x);
-                    quote! {#x, }
-                }).collect::<Vec<_>>());
+                let items = flatten(
+                    items
+                        .iter()
+                        .map(|x| {
+                            let x = emit_register(*x);
+                            quote! {#x, }
+                        })
+                        .collect::<Vec<_>>(),
+                );
                 statements.push(quote! {
                     let #target = (#items);
                 });
             }
             Instruction::Construct(target, Constructable::TaggedTuple { name, items }) => {
                 let target = emit_register(*target);
-                let items = flatten(items.iter().map(|x| {
-                    let x = emit_register(*x);
-                    quote! {#x, }
-                }).collect::<Vec<_>>());
+                let items = flatten(
+                    items
+                        .iter()
+                        .map(|x| {
+                            let x = emit_register(*x);
+                            quote! {#x, }
+                        })
+                        .collect::<Vec<_>>(),
+                );
                 let name = emit_ident(name);
                 statements.push(quote! {
                     let #target = #name(#items);
@@ -49,11 +82,16 @@ fn prepare_decode_sync(context: &Context, instructions: &[Instruction]) -> Token
             }
             Instruction::Construct(target, Constructable::Struct { name, items }) => {
                 let target = emit_register(*target);
-                let items = flatten(items.iter().map(|(name, x)| {
-                    let x = emit_register(*x);
-                    let name = emit_ident(name);
-                    quote! {#name: #x,}
-                }).collect::<Vec<_>>());
+                let items = flatten(
+                    items
+                        .iter()
+                        .map(|(name, x)| {
+                            let x = emit_register(*x);
+                            let name = emit_ident(name);
+                            quote! {#name: #x,}
+                        })
+                        .collect::<Vec<_>>(),
+                );
                 let name = emit_ident(name);
                 statements.push(quote! {
                     let #target = #name  { #items };
@@ -72,33 +110,54 @@ fn prepare_decode_sync(context: &Context, instructions: &[Instruction]) -> Token
                 let new_stream_value = emit_register(*new_stream);
                 let args = args.iter().map(|x| emit_register(*x)).collect::<Vec<_>>();
                 let input = emit_target(stream);
-                let transformed = transformer.inner.decoding_sync_gen(input, args);
+                let transformed = transformer.inner.decoding_gen(input, args, is_async);
                 statements.push(quote! {
                     let mut #new_stream_value = #transformed;
                     let #new_stream_value = &mut #new_stream_value;
                 })
             }
-            Instruction::ConditionalWrapStream(condition, prelude, stream, new_stream, transformer, args) => {
+            Instruction::ConditionalWrapStream(
+                condition,
+                prelude,
+                stream,
+                new_stream,
+                transformer,
+                args,
+            ) => {
                 let condition = emit_register(*condition);
                 let new_stream_value = emit_register(*new_stream);
                 let args = args.iter().map(|x| emit_register(*x)).collect::<Vec<_>>();
                 let input = emit_target(stream);
-                let transformed = transformer.inner.decoding_sync_gen(input.clone(), args);
-                let prelude = prepare_decode_sync(context, &prelude[..]);
+                let transformed = transformer
+                    .inner
+                    .decoding_gen(input.clone(), args, is_async);
+                let prelude = prepare_decode(context, &prelude[..], is_async, false);
 
                 //todo: would be nicer to use generics here instead of trait object
-                statements.push(quote! {
-                    let mut r_xform;
-                    let #new_stream_value: &mut dyn Read = if #condition {
-                        #prelude
-                        r_xform = #transformed;
-                        &mut r_xform
-                    } else {
-                        #input as &mut dyn Read
-                    };
-                })
+                if is_async {
+                    statements.push(quote! {
+                        let mut r_xform;
+                        let #new_stream_value: &mut dyn AsyncBufRead + Unpin + Send + Sync = if #condition {
+                            #prelude
+                            r_xform = #transformed;
+                            &mut r_xform
+                        } else {
+                            #input as &mut dyn AsyncBufRead + Unpin + Send + Sync
+                        };
+                    })
+                } else {
+                    statements.push(quote! {
+                        let mut r_xform;
+                        let #new_stream_value: &mut dyn Read = if #condition {
+                            #prelude
+                            r_xform = #transformed;
+                            &mut r_xform
+                        } else {
+                            #input as &mut dyn Read
+                        };
+                    })
+                }
             }
-
             Instruction::DecodeForeign(target, data, type_ref, args) => {
                 let target = emit_target(target);
                 let data = emit_register(*data);
@@ -108,7 +167,11 @@ fn prepare_decode_sync(context: &Context, instructions: &[Instruction]) -> Token
                     out_arguments.push(value);
                 }
 
-                statements.push(type_ref.obj.decoding_sync_gen(target, data, out_arguments));
+                statements.push(
+                    type_ref
+                        .obj
+                        .decoding_gen(target, data, out_arguments, is_async),
+                );
             }
             Instruction::DecodeRef(target, source, class, args) => {
                 let mut out_arguments = vec![];
@@ -120,9 +183,15 @@ fn prepare_decode_sync(context: &Context, instructions: &[Instruction]) -> Token
                 let target = emit_target(target);
                 let source = emit_register(*source);
                 let class = emit_ident(class);
-                statements.push(quote! {
-                    let #source = #class::decode_sync(#target #out_arguments)?;
-                });
+                if is_async {
+                    statements.push(quote! {
+                        let #source = #class::decode_async(#target #out_arguments).await?;
+                    });
+                } else {
+                    statements.push(quote! {
+                        let #source = #class::decode_sync(#target #out_arguments)?;
+                    });
+                }
             }
             Instruction::DecodeEnum(name, type_, value, target) => {
                 let target = emit_target(target);
@@ -135,7 +204,7 @@ fn prepare_decode_sync(context: &Context, instructions: &[Instruction]) -> Token
                 statements.push(quote! {
                     let #value = {
                         let mut scratch = [0u8; #length];
-                        #target.read_exact(&mut scratch[..])?;
+                        #target.read_exact(&mut scratch[..])#async_?;
                         #enum_ident::from_repr(#rep::from_be_bytes((&scratch[..]).try_into()?))?
                     };
                 });
@@ -147,7 +216,7 @@ fn prepare_decode_sync(context: &Context, instructions: &[Instruction]) -> Token
                 statements.push(quote! {
                     let #data = {
                         let mut scratch = [0u8; 1];
-                        #target.read_exact(&mut scratch[..1])?;
+                        #target.read_exact(&mut scratch[..1])#async_?;
                         scratch[0] != 0
                     };
                 });
@@ -160,7 +229,7 @@ fn prepare_decode_sync(context: &Context, instructions: &[Instruction]) -> Token
                 statements.push(quote! {
                     let #data = {
                         let mut scratch = [0u8; #length];
-                        #target.read_exact(&mut scratch[..])?;
+                        #target.read_exact(&mut scratch[..])#async_?;
                         #type_::from_be_bytes((&scratch[..]).try_into()?)
                     };
                 });
@@ -181,7 +250,7 @@ fn prepare_decode_sync(context: &Context, instructions: &[Instruction]) -> Token
                                 let ptr = t.as_ptr() as *mut u8;
                                 slice::from_raw_parts_mut(ptr, len)
                             };
-                            #target.read_exact(&mut t_borrow2[..])?;
+                            #target.read_exact(&mut t_borrow2[..])#async_?;
                             t
                         };
                     });
@@ -189,7 +258,7 @@ fn prepare_decode_sync(context: &Context, instructions: &[Instruction]) -> Token
                     statements.push(quote! {
                         let #data = {
                             let mut t: Vec<u8> = Vec::new();
-                            #target.read_to_end(&mut t)?;
+                            #target.read_to_end(&mut t)#async_?;
                             let t = Box::leak(t.into_boxed_slice());
                             let size = t.len() / mem::size_of::<#type_>();
                             unsafe { Vec::<#type_>::from_raw_parts(t.as_mut_ptr() as *mut #type_, size, size) }
@@ -199,7 +268,7 @@ fn prepare_decode_sync(context: &Context, instructions: &[Instruction]) -> Token
             }
             Instruction::Loop(target, stop_index, terminator, output, inner) => {
                 let output = emit_register(*output);
-                let inner = prepare_decode_sync(context, &inner[..]);
+                let inner = prepare_decode(context, &inner[..], is_async, false);
                 let stop = stop_index.map(emit_register);
                 let terminator = terminator.map(emit_register);
                 let target = emit_target(target);
@@ -214,7 +283,7 @@ fn prepare_decode_sync(context: &Context, instructions: &[Instruction]) -> Token
                     statements.push(quote! {
                         let mut #output = Vec::new();
                         loop {
-                            let buf = #target.fill_buf()?;
+                            let buf = #target.fill_buf()#async_?;
                             if buf.len() == 0 {
                                 break;
                             }
@@ -235,9 +304,9 @@ fn prepare_decode_sync(context: &Context, instructions: &[Instruction]) -> Token
                         //TODO: optimize this to not buffer with a Peekable type
                         {
                             let mut r = vec![];
-                            #target.read_to_end(&mut r)?;
+                            #target.read_to_end(&mut r)#async_?;
                             let r_len = r.len() as u64;
-    
+
                             {
                                 let mut #target = Cursor::new(r);
                                 let #target = &mut reader;
@@ -249,7 +318,7 @@ fn prepare_decode_sync(context: &Context, instructions: &[Instruction]) -> Token
                     });
                 }
             }
-            Instruction::LoopOutput(output, item)=> {
+            Instruction::LoopOutput(output, item) => {
                 let output = emit_register(*output);
                 let item = emit_register(*item);
                 statements.push(quote! {
@@ -260,7 +329,7 @@ fn prepare_decode_sync(context: &Context, instructions: &[Instruction]) -> Token
                 let target = emit_register(*target);
                 let interior = emit_register(*interior);
                 let condition = emit_register(*condition);
-                let inner = prepare_decode_sync(context, &inner[..]);
+                let inner = prepare_decode(context, &inner[..], is_async, false);
                 statements.push(quote! {
                     let #target = if #condition {
                         #inner
@@ -268,7 +337,7 @@ fn prepare_decode_sync(context: &Context, instructions: &[Instruction]) -> Token
                     } else {
                         None
                     };
-                }); 
+                });
             }
         }
     }
@@ -279,12 +348,11 @@ fn prepare_decode_sync(context: &Context, instructions: &[Instruction]) -> Token
     }
 }
 
-pub fn prepare_decoder(coder: &Context) -> TokenStream {
-    let decode_sync = prepare_decode_sync(&coder, &coder.instructions[..]);
-    //todo: trait
+pub fn prepare_decoder(coder: &Context, is_async: bool) -> TokenStream {
+    let decode = prepare_decode(&coder, &coder.instructions[..], is_async, true);
     let out_reg = emit_register(coder.register_count - 1);
     quote! {
-        #decode_sync
+        #decode
         Ok(#out_reg)
     }
 }

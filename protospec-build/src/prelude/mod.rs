@@ -24,3 +24,11 @@ pub use utf8::*;
 
 mod len;
 pub use len::*;
+
+pub fn map_async(is_async: bool) -> TokenStream {
+    if is_async {
+        quote! { .await }
+    } else {
+        quote! {}
+    }
+}

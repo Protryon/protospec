@@ -28,7 +28,12 @@ pub struct TestTransform;
 pub struct TestType;
 
 impl ForeignTransform for TestTransform {
-    fn decoding_sync_gen(&self, input_stream: TokenStream, arguments: Vec<TokenStream>) -> TokenStream {
+    fn decoding_gen(
+        &self,
+        input_stream: TokenStream,
+        arguments: Vec<TokenStream>,
+        is_async: bool,
+    ) -> TokenStream {
         let offset = arguments.into_iter().next().unwrap_or_else(|| quote! { 1 });
         quote! {
             {
@@ -47,7 +52,12 @@ impl ForeignTransform for TestTransform {
         }]
     }
 
-    fn encoding_sync_gen(&self, input_stream: TokenStream, arguments: Vec<TokenStream>) -> TokenStream {
+    fn encoding_gen(
+        &self,
+        input_stream: TokenStream,
+        arguments: Vec<TokenStream>,
+        is_async: bool,
+    ) -> TokenStream {
         let offset = arguments.into_iter().next().unwrap_or_else(|| quote! { 1 });
         quote! {
             {
@@ -97,7 +107,13 @@ impl ForeignType for TestType {
         }
     }
 
-    fn decoding_sync_gen(&self, source: TokenStream, output_ref: TokenStream, arguments: Vec<TokenStream>) -> TokenStream {
+    fn decoding_gen(
+        &self,
+        source: TokenStream,
+        output_ref: TokenStream,
+        arguments: Vec<TokenStream>,
+        is_async: bool,
+    ) -> TokenStream {
         quote! {
             let #output_ref = Box::new({
                 let mut scratch = [0u8; 4];
@@ -107,7 +123,13 @@ impl ForeignType for TestType {
         }
     }
 
-    fn encoding_sync_gen(&self, target: TokenStream, field_ref: TokenStream, arguments: Vec<TokenStream>) -> TokenStream {
+    fn encoding_gen(
+        &self,
+        target: TokenStream,
+        field_ref: TokenStream,
+        arguments: Vec<TokenStream>,
+        is_async: bool,
+    ) -> TokenStream {
         quote! {
             #target.write_all(&#field_ref.to_be_bytes()[..])?;
         }
@@ -119,10 +141,6 @@ impl ForeignType for TestType {
 
     fn arguments(&self) -> Vec<asg::TypeArgument> {
         vec![]
-    }
-
-    fn copyable(&self) -> bool {
-        true
     }
 }
 

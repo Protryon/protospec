@@ -3,7 +3,6 @@ use quote::{ToTokens, TokenStreamExt};
 
 use crate::ScalarType;
 
-
 #[derive(Debug)]
 pub enum FieldRef {
     Name(String),
@@ -68,5 +67,5 @@ impl ToTokens for PrimitiveType {
     }
 }
 
-pub mod encode;
 pub mod decode;
+pub mod encode;

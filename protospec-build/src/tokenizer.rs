@@ -194,9 +194,21 @@ impl Token {
                         if input[i].is_ascii_hexdigit() {
                             if i < input.len() - 1 && input[i + 1].is_ascii_hexdigit() {
                                 i += 1;
-                                out.push(u8::from_str_radix(std::str::from_utf8(&input[i..i + 2]).unwrap(), 16).unwrap());
+                                out.push(
+                                    u8::from_str_radix(
+                                        std::str::from_utf8(&input[i..i + 2]).unwrap(),
+                                        16,
+                                    )
+                                    .unwrap(),
+                                );
                             } else {
-                                out.push(u8::from_str_radix(std::str::from_utf8(&input[i..i + 1]).unwrap(), 16).unwrap());
+                                out.push(
+                                    u8::from_str_radix(
+                                        std::str::from_utf8(&input[i..i + 1]).unwrap(),
+                                        16,
+                                    )
+                                    .unwrap(),
+                                );
                             }
                         } else {
                             out.push(input[i]);
@@ -209,12 +221,7 @@ impl Token {
                 if i == input.len() {
                     return (input, None);
                 }
-                return (
-                    &input[(i + 1)..],
-                    Some(Token::String(
-                        out,
-                    )),
-                );
+                return (&input[(i + 1)..], Some(Token::String(out)));
             }
             x if x.is_ascii_digit() => {
                 let mut i = 1;
@@ -259,7 +266,7 @@ impl Token {
                 } else {
                     return (&input[1..], Some(Token::Question));
                 }
-            },
+            }
             b'[' => return (&input[1..], Some(Token::LeftSquare)),
             b']' => return (&input[1..], Some(Token::RightSquare)),
             b'{' => return (&input[1..], Some(Token::LeftCurly)),

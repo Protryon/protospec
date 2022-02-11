@@ -3,5 +3,4 @@
 members = [
     "protospec-build",
     "protospec",
-    "protospec-tests",
 ]

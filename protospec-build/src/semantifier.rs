@@ -133,7 +133,9 @@ impl Into<PartialType> for Type {
         match self {
             Type::Ref(x) => x.target.type_.borrow().clone().into(),
             Type::Scalar(x) => PartialType::Scalar(Some(x)),
-            Type::Array(x) => PartialType::Array(Some(Box::new(x.element.type_.borrow().clone().into()))),
+            Type::Array(x) => {
+                PartialType::Array(Some(Box::new(x.element.type_.borrow().clone().into())))
+            }
             x => PartialType::Type(x),
         }
     }
@@ -165,21 +167,14 @@ impl Program {
                             let parsed = match crate::parse(&loaded) {
                                 Ok(x) => x,
                                 Err(e) => {
-                                    return Err(AsgError::ImportParse(
-                                        content,
-                                        import.from.span,
-                                        e,
-                                    ))
+                                    return Err(AsgError::ImportParse(content, import.from.span, e))
                                 }
                             };
                             Program::from_ast_imports(&parsed, resolver, cache)?;
                             let asg = Program::from_ast_imported(&parsed, resolver, cache)?;
                             cache.insert(normalized, asg);
                         } else {
-                            return Err(AsgError::ImportMissing(
-                                content,
-                                import.from.span,
-                            ));
+                            return Err(AsgError::ImportMissing(content, import.from.span));
                         }
                     }
                 }
@@ -272,16 +267,19 @@ impl Program {
                                     let field = Arc::new(Field {
                                         name: ffi.name.name.clone(),
                                         arguments: RefCell::new(obj.arguments()),
-                                        type_: RefCell::new(Type::Foreign(Arc::new(NamedForeignType {
-                                            name: ffi.name.name.clone(),
-                                            span: ffi.span,
-                                            obj,
-                                        }))),
+                                        type_: RefCell::new(Type::Foreign(Arc::new(
+                                            NamedForeignType {
+                                                name: ffi.name.name.clone(),
+                                                span: ffi.span,
+                                                obj,
+                                            },
+                                        ))),
                                         condition: RefCell::new(None),
                                         transforms: RefCell::new(vec![]),
                                         span: ffi.span,
                                         toplevel: true,
                                         is_auto: Cell::new(false),
+                                        is_maybe_cyclical: Cell::new(false),
                                     });
 
                                     program
@@ -399,6 +397,7 @@ impl Program {
                             transforms: RefCell::new(vec![]),
                             toplevel: true,
                             is_auto: Cell::new(false),
+                            is_maybe_cyclical: Cell::new(false),
                         });
                         return_fields.push(typ);
 
@@ -412,20 +411,17 @@ impl Program {
             for typ in return_fields {
                 let program = program.borrow();
                 let field = program.types.get(&typ.name.name).unwrap();
-                Scope::convert_ast_field(
-                    &scope,
-                    &typ.value,
-                    field,
-                    Some(&typ.arguments[..]),
-                )?;
-    
-            }    
+                Scope::convert_ast_field(&scope, &typ.value, field, Some(&typ.arguments[..]))?;
+            }
         }
 
-        Ok(Arc::try_unwrap(program)
+        let program = Arc::try_unwrap(program)
             .ok()
             .expect("leaked program arc")
-            .into_inner())
+            .into_inner();
+
+        program.scan_cycles();
+        Ok(program)
     }
 }
 
@@ -457,10 +453,7 @@ impl Scope {
         arguments: &[ast::Expression],
         type_arguments: &[FFIArgument],
     ) -> AsgResult<Vec<Expression>> {
-        let min_arg_count = type_arguments
-            .iter()
-            .filter(|x| !x.optional)
-            .count();
+        let min_arg_count = type_arguments.iter().filter(|x| !x.optional).count();
         // optionals MUST be at the end
         if min_arg_count < arguments.len()
             && type_arguments[type_arguments.len() - min_arg_count..]
@@ -481,7 +474,15 @@ impl Scope {
             .iter()
             .zip(type_arguments.iter())
             .map(|(expr, argument)| {
-                Scope::convert_expr(self_, expr, argument.type_.clone().map(|x| x.into()).unwrap_or_else(|| PartialType::Any))
+                Scope::convert_expr(
+                    self_,
+                    expr,
+                    argument
+                        .type_
+                        .clone()
+                        .map(|x| x.into())
+                        .unwrap_or_else(|| PartialType::Any),
+                )
             })
             .collect::<AsgResult<Vec<Expression>>>()?;
         Ok(arguments)
@@ -503,10 +504,7 @@ impl Scope {
         let mut arguments = vec![];
         if let Some(ast_arguments) = ast_arguments {
             for argument in ast_arguments {
-                let target_type = Scope::convert_ast_type(
-                    &sub_scope,
-                    &argument.type_.raw_type,
-                )?;
+                let target_type = Scope::convert_ast_type(&sub_scope, &argument.type_.raw_type)?;
                 sub_scope.borrow_mut().declared_inputs.insert(
                     argument.name.name.clone(),
                     Arc::new(Input {
@@ -537,8 +535,7 @@ impl Scope {
             None
         };
 
-        let asg_type =
-            Scope::convert_ast_type(&sub_scope, &field.type_.raw_type)?;
+        let asg_type = Scope::convert_ast_type(&sub_scope, &field.type_.raw_type)?;
 
         let mut transforms = vec![];
         for ast::Transform {
@@ -555,7 +552,13 @@ impl Scope {
             } else {
                 return Err(AsgError::UnresolvedTransform(name.name.clone(), name.span));
             };
-            let arguments = Self::convert_ffi_arguments(self_, &*def_transform.name, *span, &arguments[..], &def_transform.arguments[..])?;
+            let arguments = Self::convert_ffi_arguments(
+                self_,
+                &*def_transform.name,
+                *span,
+                &arguments[..],
+                &def_transform.arguments[..],
+            )?;
 
             transforms.push(TypeTransform {
                 transform: def_transform,
@@ -576,8 +579,8 @@ impl Scope {
             match &*flag.name {
                 "auto" => {
                     is_auto = true;
-                },
-                x => return Err(AsgError::InvalidFlag(flag.span)),
+                }
+                _ => return Err(AsgError::InvalidFlag(flag.span)),
             }
         }
 
@@ -590,10 +593,7 @@ impl Scope {
         Ok(())
     }
 
-    fn convert_ast_type(
-        self_: &Arc<RefCell<Scope>>,
-        typ: &ast::RawType,
-    ) -> AsgResult<Type> {
+    fn convert_ast_type(self_: &Arc<RefCell<Scope>>, typ: &ast::RawType) -> AsgResult<Type> {
         Ok(match typ {
             ast::RawType::Container(value) => {
                 let length = value
@@ -627,14 +627,10 @@ impl Scope {
                         toplevel: false,
                         arguments: RefCell::new(vec![]),
                         is_auto: Cell::new(false),
+                        is_maybe_cyclical: Cell::new(false),
                     });
-            
-                    Scope::convert_ast_field(
-                        &sub_scope,
-                        typ,
-                        &field_out,
-                        None,
-                    )?;
+
+                    Scope::convert_ast_field(&sub_scope, typ, &field_out, None)?;
 
                     sub_scope
                         .borrow_mut()
@@ -706,7 +702,7 @@ impl Scope {
                 match &element {
                     Type::Container(_) | Type::Enum(_) => {
                         return Err(AsgError::InlineRepetition(value.span));
-                    },
+                    }
                     _ => (),
                 }
                 let field = Arc::new(Field {
@@ -718,6 +714,7 @@ impl Scope {
                     span: value.span,
                     toplevel: false,
                     is_auto: Cell::new(false),
+                    is_maybe_cyclical: Cell::new(false),
                 });
 
                 Type::Array(Box::new(ArrayType {
@@ -1068,22 +1065,34 @@ impl Scope {
                     if_false: Box::new(if_false),
                     span: expr.span,
                 })
-            },
+            }
             Call(call) => {
                 let scope = self_.borrow();
 
-                let function = scope.program.borrow().functions.get(&*call.function.name)
-                    .ok_or_else(|| AsgError::UnresolvedFunction(call.function.name.clone(), call.function.span))?
+                let function = scope
+                    .program
+                    .borrow()
+                    .functions
+                    .get(&*call.function.name)
+                    .ok_or_else(|| {
+                        AsgError::UnresolvedFunction(call.function.name.clone(), call.function.span)
+                    })?
                     .clone();
-                
-                let arguments = Self::convert_ffi_arguments(self_, &*function.name, call.span, &call.arguments[..], &function.arguments[..])?;
-                
+
+                let arguments = Self::convert_ffi_arguments(
+                    self_,
+                    &*function.name,
+                    call.span,
+                    &call.arguments[..],
+                    &function.arguments[..],
+                )?;
+
                 Expression::Call(CallExpression {
                     function,
                     arguments,
                     span: call.span,
                 })
-            },
+            }
         })
     }
 

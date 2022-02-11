@@ -1,9 +1,12 @@
 use crate::PartialType;
 use crate::{ast, AsgError, AsgResult, BinaryOp, ScalarType, Span, UnaryOp};
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 use proc_macro2::TokenStream;
-use std::{borrow::Cow, cell::{Cell, RefCell}};
 use std::fmt;
+use std::{
+    borrow::Cow,
+    cell::{Cell, RefCell},
+};
 use std::{
     cmp::Ordering,
     ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Neg, Not, Rem, Shl, Shr, Sub},
@@ -43,25 +46,45 @@ pub trait ForeignType {
         2. can read an arbitrary number of bytes from `reader`
         3. returns a value of the foreign type
     */
-    fn decoding_sync_gen(&self, source: TokenStream, output_ref: TokenStream, arguments: Vec<TokenStream>) -> TokenStream;
+    fn decoding_gen(
+        &self,
+        source: TokenStream,
+        output_ref: TokenStream,
+        arguments: Vec<TokenStream>,
+        is_async: bool,
+    ) -> TokenStream;
 
     /* output code should be a single statement that:
         1. takes an expression `field_ref` as a reference to a value of the foreign type
         2. the statement should write its output to an implicit identifier `writer` as a `&mut W` where W: Write
     */
-    fn encoding_sync_gen(&self, target: TokenStream, field_ref: TokenStream, arguments: Vec<TokenStream>) -> TokenStream;
+    fn encoding_gen(
+        &self,
+        target: TokenStream,
+        field_ref: TokenStream,
+        arguments: Vec<TokenStream>,
+        is_async: bool,
+    ) -> TokenStream;
 
     fn arguments(&self) -> Vec<TypeArgument>;
-
-    fn copyable(&self) -> bool;
 }
 
 pub type ForeignTransformObj = Box<dyn ForeignTransform + Send + Sync + 'static>;
 
 pub trait ForeignTransform {
-    fn decoding_sync_gen(&self, input_stream: TokenStream, arguments: Vec<TokenStream>) -> TokenStream;
+    fn decoding_gen(
+        &self,
+        input_stream: TokenStream,
+        arguments: Vec<TokenStream>,
+        is_async: bool,
+    ) -> TokenStream;
 
-    fn encoding_sync_gen(&self, input_stream: TokenStream, arguments: Vec<TokenStream>) -> TokenStream;
+    fn encoding_gen(
+        &self,
+        input_stream: TokenStream,
+        arguments: Vec<TokenStream>,
+        is_async: bool,
+    ) -> TokenStream;
 
     fn arguments(&self) -> Vec<FFIArgument>;
 }
@@ -84,6 +107,18 @@ pub struct Program {
     pub functions: IndexMap<String, Arc<Function>>,
 }
 
+impl Program {
+    pub fn scan_cycles(&self) {
+        for (_, field) in &self.types {
+            let mut interior_fields = IndexSet::new();
+            field.get_indirect_contained_fields(&mut interior_fields);
+            if interior_fields.contains(&field.name) {
+                field.is_maybe_cyclical.set(true);
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct TypeArgument {
     pub name: String,
@@ -102,6 +137,33 @@ pub struct Field {
     pub transforms: RefCell<Vec<TypeTransform>>,
     pub toplevel: bool,
     pub is_auto: Cell<bool>,
+    pub is_maybe_cyclical: Cell<bool>,
+}
+
+impl Field {
+    fn get_indirect_contained_fields(&self, target: &mut IndexSet<String>) {
+        let type_ = self.type_.borrow();
+        match &*type_ {
+            Type::Array(interior) => {
+                if target.insert(interior.element.name.clone()) {
+                    interior.element.get_indirect_contained_fields(target);
+                }
+            }
+            Type::Container(interior) => {
+                for (_, field) in &interior.items {
+                    if target.insert(field.name.clone()) {
+                        field.get_indirect_contained_fields(target);
+                    }
+                }
+            }
+            Type::Ref(call) => {
+                if target.insert(call.target.name.clone()) {
+                    call.target.get_indirect_contained_fields(target);
+                }
+            }
+            _ => (),
+        }
+    }
 }
 
 impl fmt::Display for Field {
@@ -158,11 +220,13 @@ pub struct ContainerType {
 
 impl ContainerType {
     //todo: optimize this
-    pub fn flatten_view<'a>(&'a self) -> impl Iterator<Item=(String, Arc<Field>)> + 'a {
-        self.items.iter().flat_map(|(name, field)| match &*field.type_.borrow() {
-            Type::Container(x) => x.flatten_view().collect::<Vec<_>>(),
-            _ => vec![(name.clone(), field.clone())]
-        })
+    pub fn flatten_view<'a>(&'a self) -> impl Iterator<Item = (String, Arc<Field>)> + 'a {
+        self.items
+            .iter()
+            .flat_map(|(name, field)| match &*field.type_.borrow() {
+                Type::Container(x) => x.flatten_view().collect::<Vec<_>>(),
+                _ => vec![(name.clone(), field.clone())],
+            })
     }
 }
 
@@ -270,25 +334,13 @@ impl Type {
         }
     }
 
-    pub fn copyable(&self) -> bool {
-        match self {
-            Type::Container(_) => false,
-            Type::Enum(_) => true,
-            Type::Scalar(_) => true,
-            Type::Array(_) => false,
-            Type::Foreign(f) => f.obj.copyable(),
-            Type::F32 => true,
-            Type::F64 => true,
-            Type::Bool => true,
-            Type::Ref(field) => field.target.type_.borrow().copyable(),
-        }
-    }
-
     pub fn assignable_from(&self, other: &Type) -> bool {
         match (self.resolved().as_ref(), other.resolved().as_ref()) {
-            (Type::Ref(field1), Type::Ref(field2)) => {
-                field1.target.type_.borrow().assignable_from(&field2.target.type_.borrow())
-            }
+            (Type::Ref(field1), Type::Ref(field2)) => field1
+                .target
+                .type_
+                .borrow()
+                .assignable_from(&field2.target.type_.borrow()),
             (Type::Ref(field), x) => field.target.type_.borrow().assignable_from(x),
             (x, Type::Ref(field)) => x.assignable_from(&field.target.type_.borrow()),
             (t1, Type::Foreign(f2)) => f2.obj.assignable_to(t1),
@@ -566,6 +618,7 @@ impl AsgExpression for Expression {
                     transforms: RefCell::new(vec![]),
                     toplevel: false,
                     is_auto: Cell::new(false),
+                    is_maybe_cyclical: Cell::new(false),
                 }),
                 length: LengthConstraint {
                     expandable: true,

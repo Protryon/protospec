@@ -1,4 +1,4 @@
-use crate::{PartialType, emit_type_ref};
+use crate::{emit_type_ref, PartialType};
 
 use super::*;
 
@@ -55,17 +55,24 @@ impl ForeignType for VarInt {
         emit_type_ref(&Type::Scalar(self.scalar_type))
     }
 
-    fn decoding_sync_gen(&self, source: TokenStream, output_ref: TokenStream, arguments: Vec<TokenStream>) -> TokenStream {
+    fn decoding_gen(
+        &self,
+        source: TokenStream,
+        output_ref: TokenStream,
+        _arguments: Vec<TokenStream>,
+        is_async: bool,
+    ) -> TokenStream {
         let inner = self.type_ref();
         let end = (self.scalar_type.size() as f64 / 7.0).ceil() as usize;
         let inner_unsigned = emit_type_ref(&self.unsigned);
+        let async_ = map_async(is_async);
         quote! {
             let #output_ref = {
                 let mut i = 0usize;
                 let mut buf = [0xffu8; 1];
                 let mut output: #inner = 0;
                 while (buf[0] & 128) == 128 {
-                    #source.read_exact(&mut buf[..])?;
+                    #source.read_exact(&mut buf[..])#async_?;
                     output |= ((buf[0] as #inner_unsigned & 127) << (i * 7)) as #inner;
                     i += 1;
                     if i > #end {
@@ -77,25 +84,28 @@ impl ForeignType for VarInt {
         }
     }
 
-    fn encoding_sync_gen(&self, target: TokenStream, field_ref: TokenStream, arguments: Vec<TokenStream>) -> TokenStream {
+    fn encoding_gen(
+        &self,
+        target: TokenStream,
+        field_ref: TokenStream,
+        _arguments: Vec<TokenStream>,
+        is_async: bool,
+    ) -> TokenStream {
         let inner_unsigned = emit_type_ref(&self.unsigned);
+        let async_ = map_async(is_async);
         quote! {
             {
                 let mut value = #field_ref.clone() as #inner_unsigned;
                 while (value & !0b1111111) != 0 {
-                    #target.write_all(&[(value as u8 & 127) | 128])?;
+                    #target.write_all(&[(value as u8 & 127) | 128])#async_?;
                     value >>= 7;
                 }
-                #target.write_all(&[value as u8])?;
+                #target.write_all(&[value as u8])#async_?;
             }
         }
     }
 
     fn arguments(&self) -> Vec<TypeArgument> {
-       vec![]
-    }
-
-    fn copyable(&self) -> bool {
-        true
+        vec![]
     }
 }

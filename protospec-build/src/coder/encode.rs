@@ -1,20 +1,28 @@
 use indexmap::IndexMap;
 
+use super::*;
 use crate::asg::*;
 use std::sync::Arc;
-use super::*;
 
 #[derive(Debug)]
 pub enum Instruction {
     Eval(usize, Expression),
     GetField(usize, usize, Vec<FieldRef>), // dest, source, op
-    AllocBuf(usize, usize), // buf handle, len handle
-    AllocDynBuf(usize), // buf handle
+    AllocBuf(usize, usize),                // buf handle, len handle
+    AllocDynBuf(usize),                    // buf handle
     WrapStream(Target, usize, Arc<Transform>, Vec<usize>), // stream, new stream, transformer, arguments
-    ConditionalWrapStream(usize, Vec<Instruction>, Target, usize, usize, Arc<Transform>, Vec<usize>), // condition, prelude, stream, new stream, owned_new_stream, transformer, arguments
-    ProxyStream(Target, usize), // stream, new stream
+    ConditionalWrapStream(
+        usize,
+        Vec<Instruction>,
+        Target,
+        usize,
+        usize,
+        Arc<Transform>,
+        Vec<usize>,
+    ), // condition, prelude, stream, new stream, owned_new_stream, transformer, arguments
+    ProxyStream(Target, usize),                            // stream, new stream
     EndStream(usize),
-    
+
     EmitBuf(Target, usize),
 
     EncodeForeign(Target, usize, Arc<NamedForeignType>, Vec<usize>),
@@ -64,16 +72,24 @@ impl Context {
             Type::Container(_) => (),
             Type::Enum(_) => (),
             _ => {
-                self.instructions.push(Instruction::GetField(0, 0, vec![FieldRef::TupleAccess(0)]))
-            },
+                self.instructions
+                    .push(Instruction::GetField(0, 0, vec![FieldRef::TupleAccess(0)]))
+            }
         }
         self.encode_field(Target::Direct, top, top, field);
     }
 
-    pub fn encode_field(&mut self, mut target: Target, root: usize, source: usize, field: &Arc<Field>) {
+    pub fn encode_field(
+        &mut self,
+        mut target: Target,
+        root: usize,
+        source: usize,
+        field: &Arc<Field>,
+    ) {
         let field_condition = if let Some(condition) = field.condition.borrow().as_ref() {
             let value = self.alloc_register();
-            self.instructions.push(Instruction::Eval(value, condition.clone()));
+            self.instructions
+                .push(Instruction::Eval(value, condition.clone()));
             Some(value)
         } else {
             None
@@ -84,7 +100,8 @@ impl Context {
         for transform in field.transforms.borrow().iter() {
             let condition = if let Some(condition) = &transform.condition {
                 let value = self.alloc_register();
-                self.instructions.push(Instruction::Eval(value, condition.clone()));
+                self.instructions
+                    .push(Instruction::Eval(value, condition.clone()));
                 Some(value)
             } else {
                 None
@@ -103,9 +120,22 @@ impl Context {
 
             if let Some(condition) = condition {
                 let drained = self.instructions.drain(argument_start..).collect();
-                self.instructions.push(Instruction::ConditionalWrapStream(condition, drained, target, new_stream, new_owned_stream.unwrap(), transform.transform.clone(), args));
+                self.instructions.push(Instruction::ConditionalWrapStream(
+                    condition,
+                    drained,
+                    target,
+                    new_stream,
+                    new_owned_stream.unwrap(),
+                    transform.transform.clone(),
+                    args,
+                ));
             } else {
-                self.instructions.push(Instruction::WrapStream(target, new_stream, transform.transform.clone(), args));
+                self.instructions.push(Instruction::WrapStream(
+                    target,
+                    new_stream,
+                    transform.transform.clone(),
+                    args,
+                ));
             }
             target = Target::Stream(new_stream);
         }
@@ -119,20 +149,26 @@ impl Context {
         // };
         let source = if field_condition.is_some() {
             let real_source = self.alloc_register();
-            self.instructions.push(Instruction::NullCheck(source, real_source, "failed null check for conditional field".to_string()));
+            self.instructions.push(Instruction::NullCheck(
+                source,
+                real_source,
+                "failed null check for conditional field".to_string(),
+            ));
             real_source
         } else {
             source
         };
-        
+
         match &*field.type_.borrow() {
             Type::Container(c) => {
                 let buf_target = if let Some(length) = &c.length {
                     //todo: use limited stream
                     let len_register = self.alloc_register();
                     let buf = self.alloc_register();
-                    self.instructions.push(Instruction::Eval(len_register, length.clone()));
-                    self.instructions.push(Instruction::AllocBuf(buf, len_register));
+                    self.instructions
+                        .push(Instruction::Eval(len_register, length.clone()));
+                    self.instructions
+                        .push(Instruction::AllocBuf(buf, len_register));
                     Target::Buf(buf)
                 } else {
                     target
@@ -145,20 +181,28 @@ impl Context {
                         auto_target.push((new_target, child));
                         continue;
                     }
-                    let (real_target, auto_field) = auto_target.last().map(|x| (Target::Buf(x.0), Some(&x.1))).unwrap_or_else(|| (buf_target, None));
+                    let (real_target, auto_field) = auto_target
+                        .last()
+                        .map(|x| (Target::Buf(x.0), Some(&x.1)))
+                        .unwrap_or_else(|| (buf_target, None));
                     if matches!(&*child.type_.borrow(), Type::Container(_)) {
                         self.encode_field(real_target, root, source, child);
                     } else {
                         let value = self.alloc_register();
-                        self.instructions.push(Instruction::GetField(value, root, vec![FieldRef::Name(name.clone())]));
-                        self.encode_field(real_target, root, value, child);        
+                        self.instructions.push(Instruction::GetField(
+                            value,
+                            root,
+                            vec![FieldRef::Name(name.clone())],
+                        ));
+                        self.encode_field(real_target, root, value, child);
                     }
                     if let Some(auto_field) = auto_field {
                         if let Some(resolved) = self.resolved_autos.get(&auto_field.name).copied() {
                             let auto_field = *auto_field;
                             let (auto_target, _) = auto_target.pop().unwrap();
                             self.encode_field(buf_target, root, resolved, auto_field);
-                            self.instructions.push(Instruction::EmitBuf(buf_target, auto_target));
+                            self.instructions
+                                .push(Instruction::EmitBuf(buf_target, auto_target));
                         } else {
                             panic!("unresolved +auto field");
                         }
@@ -174,14 +218,19 @@ impl Context {
                             };
 
                             let target = self.alloc_register();
-                            self.instructions.push(Instruction::GetLen(target, buf_target.unwrap_buf(), Some(*cast_type)));
+                            self.instructions.push(Instruction::GetLen(
+                                target,
+                                buf_target.unwrap_buf(),
+                                Some(*cast_type),
+                            ));
                             self.resolved_autos.insert(f.name.clone(), target);
-                        },
+                        }
                         _ => (),
                     }
-                    self.instructions.push(Instruction::EmitBuf(target, buf_target.unwrap_buf()));
+                    self.instructions
+                        .push(Instruction::EmitBuf(target, buf_target.unwrap_buf()));
                 }
-            },
+            }
             t => self.encode_type(target, source, t),
         }
 
@@ -217,7 +266,8 @@ impl Context {
 
         if let Some(field_condition) = field_condition {
             let drained = self.instructions.drain(start..).collect();
-            self.instructions.push(Instruction::Conditional(field_condition, drained, vec![]));
+            self.instructions
+                .push(Instruction::Conditional(field_condition, drained, vec![]));
         }
         // if let Some(buf) = buf {
         //     self.instructions.push(Instruction::EmitBuf(target, buf));
@@ -247,10 +297,14 @@ impl Context {
                             };
 
                             let target = self.alloc_register();
-                            self.instructions.push(Instruction::GetLen(target, source, Some(*cast_type)));
+                            self.instructions.push(Instruction::GetLen(
+                                target,
+                                source,
+                                Some(*cast_type),
+                            ));
                             self.resolved_autos.insert(f.name.clone(), target);
                             Some(target)
-                        },
+                        }
                         _ => None,
                     }
                 } else {
@@ -265,17 +319,14 @@ impl Context {
                         Some(r)
                     };
                 }
-            
+
                 if c.element.condition.borrow().is_none()
                     && c.element.transforms.borrow().len() == 0
                     && terminator.is_none()
                 {
                     match &*c.element.type_.borrow() {
                         // todo: const-length type optimizations for container/array/foreign
-                        Type::Container(_)
-                        | Type::Array(_)
-                        | Type::Foreign(_)
-                        | Type::Ref(_) => (),
+                        Type::Container(_) | Type::Array(_) | Type::Foreign(_) | Type::Ref(_) => (),
                         Type::Enum(x) => {
                             self.instructions.push(Instruction::EncodePrimitiveArray(
                                 target,
@@ -327,39 +378,75 @@ impl Context {
                 let current_pos = self.instructions.len();
                 let iter_index = self.alloc_register();
                 let new_source = self.alloc_register();
-                self.instructions.push(Instruction::GetField(new_source, source, vec![FieldRef::ArrayAccess(iter_index)]));
+                self.instructions.push(Instruction::GetField(
+                    new_source,
+                    source,
+                    vec![FieldRef::ArrayAccess(iter_index)],
+                ));
                 self.encode_field(target, 0, new_source, &c.element);
                 let drained = self.instructions.drain(current_pos..).collect();
                 let len = if let Some(len) = len {
                     len
                 } else {
                     let len = self.alloc_register();
-                    self.instructions.push(Instruction::GetLen(len, source, None));
+                    self.instructions
+                        .push(Instruction::GetLen(len, source, None));
                     len
                 };
-                self.instructions.push(Instruction::Loop(iter_index, len, drained));
+                self.instructions
+                    .push(Instruction::Loop(iter_index, len, drained));
                 if let Some(terminator) = terminator {
-                    self.instructions.push(Instruction::EncodePrimitiveArray(target, terminator, PrimitiveType::Scalar(ScalarType::U8), None));
+                    self.instructions.push(Instruction::EncodePrimitiveArray(
+                        target,
+                        terminator,
+                        PrimitiveType::Scalar(ScalarType::U8),
+                        None,
+                    ));
                 }
-            },
+            }
             Type::Enum(e) => {
-                self.instructions.push(Instruction::EncodeEnum(PrimitiveType::Scalar(e.rep.clone()), target, source));
-            },
+                self.instructions.push(Instruction::EncodeEnum(
+                    PrimitiveType::Scalar(e.rep.clone()),
+                    target,
+                    source,
+                ));
+            }
             Type::Scalar(s) => {
-                self.instructions.push(Instruction::EncodePrimitive(target, source, PrimitiveType::Scalar(*s)));
-            },
+                self.instructions.push(Instruction::EncodePrimitive(
+                    target,
+                    source,
+                    PrimitiveType::Scalar(*s),
+                ));
+            }
             Type::F32 => {
-                self.instructions.push(Instruction::EncodePrimitive(target, source, PrimitiveType::F32));
-            },
+                self.instructions.push(Instruction::EncodePrimitive(
+                    target,
+                    source,
+                    PrimitiveType::F32,
+                ));
+            }
             Type::F64 => {
-                self.instructions.push(Instruction::EncodePrimitive(target, source, PrimitiveType::F64));
-            },
+                self.instructions.push(Instruction::EncodePrimitive(
+                    target,
+                    source,
+                    PrimitiveType::F64,
+                ));
+            }
             Type::Bool => {
-                self.instructions.push(Instruction::EncodePrimitive(target, source, PrimitiveType::Bool));
-            },
+                self.instructions.push(Instruction::EncodePrimitive(
+                    target,
+                    source,
+                    PrimitiveType::Bool,
+                ));
+            }
             Type::Foreign(f) => {
-                self.instructions.push(Instruction::EncodeForeign(target, source, f.clone(), vec![]));
-            },
+                self.instructions.push(Instruction::EncodeForeign(
+                    target,
+                    source,
+                    f.clone(),
+                    vec![],
+                ));
+            }
             Type::Ref(r) => {
                 let mut args = vec![];
                 for arg in r.arguments.iter() {
@@ -380,18 +467,28 @@ impl Context {
                                     };
 
                                     let len_target = self.alloc_register();
-                                    self.instructions.push(Instruction::GetLen(len_target, source, Some(*cast_type)));
+                                    self.instructions.push(Instruction::GetLen(
+                                        len_target,
+                                        source,
+                                        Some(*cast_type),
+                                    ));
                                     self.resolved_autos.insert(f.name.clone(), len_target);
-                                },
+                                }
                                 _ => (),
                             }
                         }
                     }
-                    self.instructions.push(Instruction::EncodeForeign(target, source, f.clone(), args));
+                    self.instructions.push(Instruction::EncodeForeign(
+                        target,
+                        source,
+                        f.clone(),
+                        args,
+                    ));
                 } else {
-                    self.instructions.push(Instruction::EncodeRef(target, source, args));
+                    self.instructions
+                        .push(Instruction::EncodeRef(target, source, args));
                 }
-            },
+            }
         }
     }
 }

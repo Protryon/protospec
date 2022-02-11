@@ -1,7 +1,6 @@
 use std::{
     cmp::{Ordering, PartialOrd},
     ops::{Add, Div, Mul, Neg, Rem, Sub},
-    fmt::Write,
 };
 
 use proc_macro2::Literal;
@@ -133,7 +132,7 @@ impl ConstValue {
                 quote! {
                     #c
                 }
-            },
+            }
             ConstValue::F32(s) => quote! { #s },
             ConstValue::F64(s) => quote! { #s },
         }
@@ -192,7 +191,9 @@ pub fn eval_const_expression(expr: &Expression) -> Option<ConstValue> {
                 BinaryOp::Mul => ConstValue::Int((left.to_int()? * right.to_int()?)?),
                 BinaryOp::Div => ConstValue::Int((left.to_int()? / right.to_int()?)?),
                 BinaryOp::Mod => ConstValue::Int((left.to_int()? % right.to_int()?)?),
-                BinaryOp::Elvis => unimplemented!("cannot use elvis operator (?:) in const context"),
+                BinaryOp::Elvis => {
+                    unimplemented!("cannot use elvis operator (?:) in const context")
+                }
             })
         }
         Unary(c) => {
@@ -207,16 +208,16 @@ pub fn eval_const_expression(expr: &Expression) -> Option<ConstValue> {
             let inner = eval_const_expression(&c.inner)?;
             inner.cast_to(&c.type_)
         }
-        ArrayIndex(c) => {
+        ArrayIndex(_) => {
             unimplemented!("can not use array indexing in const")
         }
         EnumAccess(c) => eval_const_expression(&c.variant.value),
         Int(c) => Some(ConstValue::Int(c.value)),
         ConstRef(c) => eval_const_expression(&c.value),
-        InputRef(c) => {
+        InputRef(_) => {
             unimplemented!("cannot access input in constant");
         }
-        FieldRef(c) => {
+        FieldRef(_) => {
             unimplemented!("cannot access field in constant");
         }
         Str(c) => Some(ConstValue::String(c.content.clone())),
@@ -232,7 +233,7 @@ pub fn eval_const_expression(expr: &Expression) -> Option<ConstValue> {
             }
         }
         Bool(c) => Some(ConstValue::Bool(*c)),
-        Call(c) => {
+        Call(_) => {
             unimplemented!("cannot call ffi in constant");
         }
     }

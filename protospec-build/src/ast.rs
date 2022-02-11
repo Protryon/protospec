@@ -86,7 +86,7 @@ impl_node!(FfiDeclaration);
 pub enum FfiType {
     Transform,
     Type,
-    Function
+    Function,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

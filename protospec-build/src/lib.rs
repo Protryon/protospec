@@ -3,7 +3,11 @@ extern crate quote;
 
 #[macro_use]
 pub mod result;
-use std::{io::Write, path::PathBuf, process::{Command, Stdio}};
+use std::{
+    io::Write,
+    path::PathBuf,
+    process::{Command, Stdio},
+};
 
 pub use result::*;
 
@@ -37,12 +41,14 @@ pub use prelude::*;
 pub struct Options {
     pub format_output: bool,
     pub derives: Vec<String>,
+    pub include_async: bool,
 }
 
 impl Default for Options {
     fn default() -> Self {
         Options {
             format_output: true,
+            include_async: false,
             derives: vec![
                 "PartialEq".to_string(),
                 "Debug".to_string(),
@@ -54,6 +60,8 @@ impl Default for Options {
 
 pub fn rustfmt(input: &str) -> String {
     let mut proc = Command::new("rustfmt")
+        .arg("--edition")
+        .arg("2021")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
@@ -66,19 +74,20 @@ pub fn rustfmt(input: &str) -> String {
 
 pub fn compile_spec(name: &str, spec: &str, options: &Options) -> AsgResult<()> {
     let resolver = PreludeImportResolver(NullImportResolver);
-    let program = asg::Program::from_ast(
-        &parse(spec).map_err(|x| -> Error { x.into() })?,
-        &resolver,
-    )?;
+    let program =
+        asg::Program::from_ast(&parse(spec).map_err(|x| -> Error { x.into() })?, &resolver)?;
     let compiler_options = CompileOptions {
         derives: options.derives.clone(),
+        include_async: options.include_async,
     };
     let compiled = compiler::compile_program(&program, &compiler_options);
     let mut compiled = compiled.to_string();
     if options.format_output {
         compiled = rustfmt(&compiled);
     }
-    let mut target: PathBuf = std::env::var("OUT_DIR").expect("OUT_DIR env var not set").into();
+    let mut target: PathBuf = std::env::var("OUT_DIR")
+        .expect("OUT_DIR env var not set")
+        .into();
     target.push(format!("{}.rs", name));
     std::fs::write(target, compiled).expect("failed to write to target");
     Ok(())

@@ -1,4 +1,4 @@
-use crate::{asg::*};
+use crate::asg::*;
 use crate::coder;
 use crate::{BinaryOp, UnaryOp};
 use expr::*;
@@ -7,17 +7,18 @@ use quote::TokenStreamExt;
 use quote::{format_ident, quote};
 use std::{sync::Arc, unimplemented};
 
-mod decoder_sync;
-mod encoder_sync;
+mod decoder;
+mod encoder;
 mod expr;
 
 pub fn global_name(input: &str) -> String {
     input.to_string()
 }
 
-#[derive(Default, Clone, Debug)]
+#[derive(Clone, Default, Debug)]
 pub struct CompileOptions {
     pub derives: Vec<String>,
+    pub include_async: bool,
 }
 
 impl CompileOptions {
@@ -48,10 +49,9 @@ impl CompileOptions {
 }
 
 pub fn compile_program(program: &Program, options: &CompileOptions) -> TokenStream {
-    //let mut emitted_types = IndexMap<Uuid,
     let mut components = vec![];
     components.push(quote! {
-        use std::io::{Read, Write, BufRead, Cursor};
+        use std::io::{Read, BufRead, Cursor};
         use std::slice;
         use std::mem;
         use std::convert::TryInto;
@@ -94,37 +94,34 @@ pub fn compile_program(program: &Program, options: &CompileOptions) -> TokenStre
                 });
             }
         }
-        components.push(prepare_impls(&field));
+        components.push(prepare_impls(&field, options));
     }
     let components = flatten(components);
     quote! {
-        #components
+        #[allow(unused_imports, unused_parens, unused_variables, dead_code)]
+        mod _ps {
+            #components
+        }
+        pub use _ps::*;
     }
 }
 
-fn ref_resolver(f: &Arc<Field>) -> TokenStream {
+fn ref_resolver(_f: &Arc<Field>) -> TokenStream {
     unimplemented!("cannot reference field in input default");
 }
 
-fn prepare_impls(field: &Arc<Field>) -> TokenStream {
+fn prepare_impls(field: &Arc<Field>, options: &CompileOptions) -> TokenStream {
     let container_ident = format_ident!("{}", global_name(&field.name));
-    // let mut context = OldContext::new();
-    // context.encode_field(field);
 
-    // let decode_sync = decoder_sync::prepare_decoder(field, &context);
-    // let current_field_ref = match &field.type_ {
-    //     Type::Container(_) => quote! { self },
-    //     Type::Enum(_) => quote! { self },
-    //     _ => quote! { self.0 },
-    // };
     let mut decode_context = coder::decode::Context::new();
     decode_context.decode_field_top(field);
-    let decode_sync = decoder_sync::prepare_decoder(&decode_context);
+    let decode_sync = decoder::prepare_decoder(&decode_context, false);
 
     let mut new_context = coder::encode::Context::new();
     new_context.encode_field_top(field);
 
-    let encode_sync = encoder_sync::prepare_encoder(&new_context);
+    let encode_sync = encoder::prepare_encoder(&new_context, false);
+
     let mut arguments = vec![];
     let mut redefaults = vec![];
     for argument in field.arguments.borrow().iter() {
@@ -150,6 +147,34 @@ fn prepare_impls(field: &Arc<Field>) -> TokenStream {
     let arguments = flatten(arguments);
     let redefaults = flatten(redefaults);
 
+    let async_functions = if options.include_async {
+        let async_recursion = if field.is_maybe_cyclical.get() {
+            quote! {
+                #[async_recursion::async_recursion]
+            }
+        } else {
+            quote! {}
+        };
+
+        let encode_async = encoder::prepare_encoder(&new_context, true);
+        let decode_async = decoder::prepare_decoder(&decode_context, true);
+        quote! {
+            #async_recursion
+            pub async fn encode_async<W: tokio::io::AsyncWrite + Send + Sync + Unpin>(&self, writer: &mut W #arguments) -> Result<()> {
+                #redefaults
+                #encode_async
+            }
+
+            #async_recursion
+            pub async fn decode_async<R: tokio::io::AsyncBufRead + Send + Sync + Unpin>(reader: &mut R #arguments) -> Result<Self> {
+                #redefaults
+                #decode_async
+            }
+        }
+    } else {
+        quote! {}
+    };
+
     quote! {
         impl #container_ident {
             pub fn decode_sync<R: Read + BufRead>(reader: &mut R #arguments) -> Result<Self> {
@@ -157,18 +182,12 @@ fn prepare_impls(field: &Arc<Field>) -> TokenStream {
                 #decode_sync
             }
 
-            // pub fn decode_buf<B: AsRef<[u8]>(mut buf: B) -> Self {
-            //     unimplemented!()
-            // }
-
-            // pub async fn decode<R: AsyncReadRead>(mut reader: R) -> Self {
-            //     unimplemented!()
-            // }
-
-            pub fn encode_sync<W: Write>(&self, writer: &mut W #arguments) -> Result<()> {
+            pub fn encode_sync<W: std::io::Write>(&self, writer: &mut W #arguments) -> Result<()> {
                 #redefaults
                 #encode_sync
             }
+
+            #async_functions
         }
     }
 }
@@ -290,30 +309,4 @@ pub fn generate_enum(name: &str, item: &EnumType, options: &CompileOptions) -> T
             }
         }
     }
-}
-
-fn emit_arguments<F: Fn(&Arc<Field>) -> TokenStream>(
-    arguments: &[Expression],
-    transform_arguments: &[FFIArgument],
-    ref_resolver: &F,
-) -> TokenStream {
-    let mut args_emitted = vec![];
-    let mut arguments = arguments.iter();
-    for arg in transform_arguments.iter() {
-        let value = arguments.next().map(|x| emit_expression(x, ref_resolver));
-        let value = if arg.optional {
-            if let Some(value) = value {
-                quote! { Some(#value) }
-            } else {
-                quote! { None }
-            }
-        } else {
-            value.unwrap()
-        };
-        let name = emit_ident(&arg.name);
-        args_emitted.push(quote! {
-            let #name = #value;
-        });
-    }
-    flatten(args_emitted)
 }
