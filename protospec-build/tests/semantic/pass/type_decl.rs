@@ -56,9 +56,10 @@ fn test_nested_container_scoping() {
 fn test_array_length_expand() {
     load_asg(
         r#"
-    type test = container {
+    type testcontainer = container {
         west: u32,
-    } [..];
+    };
+    type test = testcontainer[..];
     "#,
     )
     .unwrap();
@@ -92,9 +93,10 @@ fn test_container_array() {
 fn test_array_container_array() {
     load_asg(
         r#"
-    type test = container [5] {
+    type testcontainer = container [5] {
         west: u8[4],
-    }[3];
+    };
+    type test = testcontainer[3];
     "#,
     )
     .unwrap();
@@ -160,13 +162,14 @@ fn test_enum() {
 fn test_enum_array() {
     load_asg(
         r#"
-    type test = enum i32 {
+    type testenum = enum i32 {
         test = 1,
         west,
         east,
         north = 6,
         south,
-    }[10];
+    };
+    type test = testenum[10];
     "#,
     )
     .unwrap();
