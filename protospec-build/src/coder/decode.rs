@@ -41,7 +41,7 @@ pub enum Instruction {
         Vec<usize>,
     ), // condition, prelude, stream, new stream, transformer, arguments
 
-    DecodeForeign(Target, usize, Arc<NamedForeignType>, Vec<usize>),
+    DecodeForeign(Target, usize, Arc<ForeignType>, Vec<usize>),
     DecodeRef(Target, usize, String, Vec<usize>),
     DecodeEnum(String, PrimitiveType, usize, Target),
     DecodePrimitive(Target, usize, PrimitiveType),

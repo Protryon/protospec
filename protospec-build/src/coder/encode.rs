@@ -25,7 +25,7 @@ pub enum Instruction {
 
     EmitBuf(Target, usize),
 
-    EncodeForeign(Target, usize, Arc<NamedForeignType>, Vec<usize>),
+    EncodeForeign(Target, usize, Arc<ForeignType>, Vec<usize>),
     EncodeRef(Target, usize, Vec<usize>),
     EncodeEnum(PrimitiveType, Target, usize),
     EncodePrimitive(Target, usize, PrimitiveType),

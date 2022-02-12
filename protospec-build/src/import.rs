@@ -1,5 +1,4 @@
-use crate::asg::{ForeignTransformObj, ForeignTypeObj};
-use crate::{result::*, ForeignFunctionObj};
+use crate::{result::*, ForeignFunctionObj, ForeignTransformObj, ForeignTypeObj};
 
 pub trait ImportResolver {
     fn normalize_import(&self, import: &str) -> Result<String>;

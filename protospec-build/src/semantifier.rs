@@ -274,7 +274,7 @@ impl Program {
                                         name: ffi.name.name.clone(),
                                         arguments: RefCell::new(obj.arguments()),
                                         type_: RefCell::new(Type::Foreign(Arc::new(
-                                            NamedForeignType {
+                                            ForeignType {
                                                 name: ffi.name.name.clone(),
                                                 span: ffi.span,
                                                 obj,
@@ -797,7 +797,7 @@ impl Scope {
                         })
                         .collect::<AsgResult<Vec<Expression>>>()?;
 
-                    Type::Ref(TypeCall {
+                    Type::Ref(TypeRef {
                         target: target.clone(),
                         arguments,
                     })

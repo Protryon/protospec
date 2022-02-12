@@ -3,7 +3,7 @@ mod parse;
 mod semantic;
 use indexmap::IndexMap;
 use proc_macro2::TokenStream;
-use protospec_build::*;
+use protospec_build::{*, ffi::ForeignType};
 use quote::quote;
 
 pub fn load_asg(content: &str) -> AsgResult<asg::Program> {

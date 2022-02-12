@@ -2,6 +2,7 @@ use crate::asg::*;
 use crate::ast::ScalarType;
 use crate::import::*;
 use crate::result::*;
+use crate::ffi::{*, ForeignType};
 use proc_macro2::TokenStream;
 use quote::*;
 

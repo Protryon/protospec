@@ -37,6 +37,9 @@ pub mod coder;
 pub mod prelude;
 pub use prelude::*;
 
+pub mod ffi;
+pub use ffi::*;
+
 #[derive(Clone)]
 pub struct Options {
     pub format_output: bool,
