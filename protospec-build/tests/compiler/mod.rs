@@ -942,5 +942,5 @@ fn test_compiler_tagged_nested_enum_struct() {
         });
     };
 
-    compile("tagged_enum_default", &compile_test_program(&asg, test));
+    compile("tagged_nested_enum_struct", &compile_test_program(&asg, test));
 }

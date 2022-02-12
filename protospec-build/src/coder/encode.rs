@@ -2,7 +2,7 @@ use indexmap::IndexMap;
 
 use super::*;
 use crate::asg::*;
-use std::sync::Arc;
+use std::{sync::Arc, collections::HashMap};
 
 #[derive(Debug)]
 pub enum Instruction {
@@ -47,6 +47,8 @@ pub enum Instruction {
     Break,
 }
 
+type Resolver = Box<dyn Fn(&mut Context, &str) -> usize>;
+
 #[derive(Debug)]
 pub struct Context {
     pub register_count: usize,
@@ -82,7 +84,16 @@ impl Context {
                     .push(Instruction::GetField(0, 0, vec![FieldRef::TupleAccess(0)]))
             }
         }
-        self.encode_field(Target::Direct, top, top, field);
+        let resolver: Resolver = Box::new(move |context: &mut Context, name: &str| {
+            let value = context.alloc_register();
+            context.instructions.push(Instruction::GetField(
+                value,
+                top,
+                vec![FieldRef::Name(name.to_string())],
+            ));
+            value
+        });
+        self.encode_field(Target::Direct, &resolver, top, field);
     }
 
     fn encode_field_condition(&mut self, field: &Arc<Field>) -> Option<usize> {
@@ -99,14 +110,14 @@ impl Context {
     pub fn encode_field(
         &mut self,
         target: Target,
-        root: usize,
+        resolver: &Resolver,
         source: usize,
         field: &Arc<Field>,
     ) {
         let field_condition = self.encode_field_condition(field);
         let start = self.instructions.len();
         
-        self.encode_field_unconditional(target, root, source, field, field_condition.is_some());
+        self.encode_field_unconditional(target, resolver, source, field, field_condition.is_some());
 
         if let Some(field_condition) = field_condition {
             let drained = self.instructions.drain(start..).collect();
@@ -115,27 +126,9 @@ impl Context {
         }
     }
 
-    fn encode_container_items(&mut self, container: &ContainerType, buf_target: Target, root: usize, source: usize) {
-        let mut resolved = vec![];
-
-        for (name, child) in container.items.iter() {
-            if child.is_auto.get() || matches!(&*child.type_.borrow(), Type::Container(_)) {
-                continue;
-            }
-            let value = self.alloc_register();
-            self.instructions.push(Instruction::GetField(
-                value,
-                root,
-                vec![FieldRef::Name(name.clone())],
-            ));
-            resolved.push(value);
-        }
-        self.encode_container_items_resolved(container, buf_target, root, source, resolved.into_iter());
-    }
-
-    fn encode_container_items_resolved(&mut self, container: &ContainerType, buf_target: Target, root: usize, source: usize, mut resolved: impl Iterator<Item = usize>) {
+    fn encode_container_items(&mut self, container: &ContainerType, buf_target: Target, resolver: &Resolver, source: usize) {
         let mut auto_target = vec![];
-        for (_, child) in container.items.iter() {
+        for (name, child) in container.items.iter() {
             if child.is_auto.get() {
                 let new_target = self.alloc_register();
                 self.instructions.push(Instruction::AllocDynBuf(new_target));
@@ -148,9 +141,10 @@ impl Context {
                 .unwrap_or_else(|| (buf_target, None));
             if matches!(&*child.type_.borrow(), Type::Container(_)) {
                 //TODO: this may not work
-                self.encode_field(real_target, root, source, child);
+                self.encode_field(real_target, resolver, source, child);
             } else {
-                self.encode_field(real_target, root, resolved.next().expect("malformed resolved"), child);
+                let resolved = resolver(self, &**name);
+                self.encode_field(real_target, resolver, resolved, child);
             }
             if let Some(auto_field) = auto_field {
                 if let Some(resolved) = self.resolved_autos.get(&auto_field.name).copied() {
@@ -159,7 +153,7 @@ impl Context {
                     if auto_field.name != target_auto_field.name {
                         panic!("+auto tags must be declared and used in a hierarchical manner");
                     }
-                    self.encode_field(buf_target, root, resolved, auto_field);
+                    self.encode_field(buf_target, resolver, resolved, auto_field);
                     self.instructions
                         .push(Instruction::EmitBuf(buf_target, auto_target));
                 } else {
@@ -175,7 +169,7 @@ impl Context {
     fn encode_field_unconditional(
         &mut self,
         mut target: Target,
-        root: usize,
+        resolver: &Resolver,
         source: usize,
         field: &Arc<Field>,
         was_conditional: bool,
@@ -263,7 +257,6 @@ impl Context {
                             Type::Container(c) => {
 
                                 let mut unwrapped = vec![];
-                                let mut fields = vec![];
                                 for (subname, subchild) in c.flatten_view() {
                                     if !matches!(&*subchild.type_.borrow(), Type::Container(_)) {
                                         let alloced = self.alloc_register();
@@ -271,7 +264,6 @@ impl Context {
                                             subname.clone(),
                                             alloced,
                                         ));
-                                        fields.push(alloced);
                                     }
                                 }
 
@@ -279,11 +271,14 @@ impl Context {
                                     field.name.clone(),
                                     name.clone(),
                                     source,
-                                    unwrapped,
+                                    unwrapped.clone(),
                                     "mismatch betweeen condition and enum discriminant".to_string(),
                                 ));
 
-                                self.encode_container_items_resolved(c, buf_target, root, source, fields.into_iter());
+                                let map = unwrapped.into_iter().collect::<HashMap<_, _>>();
+
+                                let resolver: Resolver = Box::new(move |_context, name| *map.get(name).expect("illegal field ref"));
+                                self.encode_container_items(c, buf_target, &resolver, source, );
                                 self.instructions.push(Instruction::Break);
                             },
                             _ => {
@@ -294,8 +289,9 @@ impl Context {
                                     unwrapped,
                                     "mismatch betweeen condition and enum discriminant".to_string(),
                                 ));
-        
-                                self.encode_field_unconditional(buf_target, unwrapped, unwrapped, child, false);
+                                
+                                let resolver: Resolver = Box::new(|_, _| panic!("fields refs illegal in raw enum value"));
+                                self.encode_field_unconditional(buf_target, &resolver, unwrapped, child, false);
                                 self.instructions.push(Instruction::Break);
                             },
                         }
@@ -311,7 +307,7 @@ impl Context {
                         .push(Instruction::BreakBlock(drained));
 
                 } else {
-                    self.encode_container_items(c, buf_target, root, source);
+                    self.encode_container_items(c, buf_target, resolver, source);
                 }
 
                 if let Some(length) = &c.length {
@@ -337,7 +333,7 @@ impl Context {
                         .push(Instruction::EmitBuf(target, buf_target.unwrap_buf()));
                 }
             }
-            t => self.encode_type(target, source, t),
+            t => self.encode_type(target, resolver, source, t),
         }
 
         for (stream, owned_stream) in new_streams.iter().rev() {
@@ -348,7 +344,7 @@ impl Context {
         }
     }
 
-    pub fn encode_type(&mut self, target: Target, source: usize, type_: &Type) {
+    pub fn encode_type(&mut self, target: Target, resolver: &Resolver, source: usize, type_: &Type) {
         match type_ {
             Type::Container(_) => unimplemented!(),
             Type::Array(c) => {
@@ -457,7 +453,7 @@ impl Context {
                     source,
                     vec![FieldRef::ArrayAccess(iter_index)],
                 ));
-                self.encode_field(target, 0, new_source, &c.element);
+                self.encode_field(target, resolver, new_source, &c.element);
                 let drained = self.instructions.drain(current_pos..).collect();
                 let len = if let Some(len) = len {
                     len

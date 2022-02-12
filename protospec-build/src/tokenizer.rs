@@ -213,9 +213,15 @@ impl Token {
                         } else {
                             out.push(input[i]);
                         }
+                        i += 1;
+                        if i == input.len() {
+                            return (input, None);
+                        }
+                        continue;
                     } else if input[i] == b'"' {
                         break;
                     }
+                    out.push(input[i]);
                     i += 1;
                 }
                 if i == input.len() {
@@ -549,6 +555,23 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_string() {
+        let tokens = tokenize(
+            r#""test" "test\"test""#,
+        )
+        .unwrap();
+        let mut output = String::new();
+        for SpannedToken { token, .. } in tokens.iter() {
+            output += &token.to_string();
+        }
+        assert_eq!(
+            output,
+            r#""test""test"test""#
+        );
+
+    }
+
+    #[test]
     fn test_tokenizer() {
         let tokens = tokenize(
             r#"
@@ -587,7 +610,7 @@ mod tests {
         }
         assert_eq!(
             output,
-            r#"test_ident"string""str\"ing""str\\ing"12345-12345type as import import_ffi i8 u8 transform function const /*
+            r#"test_ident"string""str"ing""str\ing"12345-12345type as import import_ffi i8 u8 transform function const /*
 
         test block*/ container f32 f64 enum true false bool from ,;:?[]{}< > ?+-/ *%.. <= >= = == != ! ()// test$
 :> || && | ^| >> << >>> ~. ?: //
