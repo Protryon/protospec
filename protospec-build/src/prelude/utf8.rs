@@ -91,4 +91,8 @@ impl ForeignType for Utf8 {
             can_resolve_auto: true,
         }]
     }
+
+    fn can_receive_auto(&self) -> Option<ScalarType> {
+        None
+    }
 }

@@ -108,4 +108,8 @@ impl ForeignType for VarInt {
     fn arguments(&self) -> Vec<TypeArgument> {
         vec![]
     }
+
+    fn can_receive_auto(&self) -> Option<ScalarType> {
+        Some(self.scalar_type)
+    }
 }

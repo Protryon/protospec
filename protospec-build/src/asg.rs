@@ -67,6 +67,8 @@ pub trait ForeignType {
     ) -> TokenStream;
 
     fn arguments(&self) -> Vec<TypeArgument>;
+
+    fn can_receive_auto(&self) -> Option<ScalarType>;
 }
 
 pub type ForeignTransformObj = Box<dyn ForeignTransform + Send + Sync + 'static>;

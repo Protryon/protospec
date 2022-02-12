@@ -56,26 +56,28 @@ pub enum AsgError {
     UnexpectedType(String, String, Span),
     #[error("illegal cast, cannot cast from {0} to {1} @ {2}")]
     IllegalCast(String, String, Span),
-    #[error("reference enum variant for enum {0}, {1}@ {2} is not a valid variant")]
+    #[error("reference enum variant for enum {0}, {1} @ {2} is not a valid variant")]
     UnresolvedEnumVariant(String, String, Span),
     #[error("could not infer type @ {0} (try adding more explicit types)")]
     UninferredType(Span),
-    #[error("could not parse int {0} @ {1}")]
+    #[error("could not parse int {0} @ {1} @ {1}")]
     InvalidInt(String, Span),
-    #[error("invalid number of arguments for ffi, expected {0} to {1} arguments, got {2}")]
+    #[error("invalid number of arguments for ffi, expected {0} to {1} arguments, got {2} @ {3}")]
     InvalidFFIArgumentCount(usize, usize, usize, Span),
-    #[error("invalid number of arguments for type, expected {0} to {1} arguments, got {2}")]
+    #[error("invalid number of arguments for type, expected {0} to {1} arguments, got {2} @ {3}")]
     InvalidTypeArgumentCount(usize, usize, usize, Span),
-    #[error("cannot have required arguments after optional arguments for type")]
+    #[error("cannot have required arguments after optional arguments for type @ {0}")]
     InvalidTypeArgumentOrder(Span),
-    #[error("illegal repitition of container or enum, outline the container/enum as a top level type declaration")]
+    #[error("illegal repitition of container or enum, outline the container/enum as a top level type declaration @ {0}")]
     InlineRepetition(Span),
-    #[error("invalid or unknown flag '{0}'")]
+    #[error("invalid or unknown flag '{0}' @ {1}")]
     InvalidFlag(String, Span),
-    #[error("enum containers must be top level")]
+    #[error("enum containers must be top level @ {0}")]
     EnumContainerMustBeToplevel(Span),
-    #[error("cannot have field after unconditional field in enum container")]
+    #[error("cannot have field after unconditional field in enum container @ {0}")]
     EnumContainerFieldAfterUnconditional(Span),
+    #[error("type `{0}` does not implement auto receiving @ {1}")]
+    TypeNotAutoCompatible(String, Span),
     #[error("unknown: {0}")]
     Unknown(#[from] crate::Error),
 }
@@ -582,6 +584,11 @@ impl Scope {
         for flag in field.flags.iter() {
             match &*flag.name {
                 "auto" => {
+                    match asg_type.resolved().as_ref() {
+                        Type::Scalar(_) => (),
+                        Type::Foreign(f) if f.obj.can_receive_auto().is_some() => (),
+                        other => return Err(AsgError::TypeNotAutoCompatible(other.to_string(), field.type_.span)),
+                    }
                     is_auto = true;
                 }
                 x => return Err(AsgError::InvalidFlag(x.to_string(), flag.span)),

@@ -314,8 +314,12 @@ impl Context {
                     match length {
                         Expression::FieldRef(f) if f.is_auto.get() => {
                             let type_ = f.type_.borrow();
-                            let cast_type = match &*type_ {
-                                Type::Scalar(s) => s,
+                            let cast_type = match type_.resolved().as_ref() {
+                                Type::Scalar(s) => *s,
+                                Type::Foreign(f) => match f.obj.can_receive_auto() {
+                                    Some(s) => s,
+                                    None => unimplemented!("bad ffi type for auto field"),
+                                },
                                 _ => unimplemented!("bad type for auto field"),
                             };
 
@@ -323,7 +327,7 @@ impl Context {
                             self.instructions.push(Instruction::GetLen(
                                 target,
                                 buf_target.unwrap_buf(),
-                                Some(*cast_type),
+                                Some(cast_type),
                             ));
                             self.resolved_autos.insert(f.name.clone(), target);
                         }

@@ -142,6 +142,10 @@ impl ForeignType for TestType {
     fn arguments(&self) -> Vec<asg::TypeArgument> {
         vec![]
     }
+
+    fn can_receive_auto(&self) -> Option<ScalarType> {
+        None
+    }
 }
 
 pub struct TestImportResolver;
