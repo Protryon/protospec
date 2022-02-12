@@ -354,7 +354,7 @@ fn test_compiler_container_fill() {
         }));
     };
 
-    compile("container_length", &compile_test_program(&asg, test));
+    compile("container_fill", &compile_test_program(&asg, test));
 }
 
 #[test]

@@ -30,7 +30,7 @@ fn test_enum_const() {
         blue,
     };
     const TEST: color = 5i32;
-    const TEST2: color = color.red;
+    const TEST2: color = color::red;
     "#,
     )
     .unwrap();

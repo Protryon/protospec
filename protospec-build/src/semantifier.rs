@@ -76,7 +76,7 @@ pub enum AsgError {
     EnumContainerMustBeToplevel(Span),
     #[error("cannot have field after unconditional field in enum container")]
     EnumContainerFieldAfterUnconditional(Span),
-    #[error("unknown")]
+    #[error("unknown: {0}")]
     Unknown(#[from] crate::Error),
 }
 
