@@ -23,8 +23,8 @@ pub use asg::*;
 pub mod parser;
 pub use parser::*;
 
-pub mod semantifier;
-pub use semantifier::*;
+pub mod semantics;
+pub use semantics::*;
 
 pub mod import;
 pub use import::*;
