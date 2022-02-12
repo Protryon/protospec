@@ -94,7 +94,42 @@ fn prepare_decode(
                 );
                 let name = emit_ident(name);
                 statements.push(quote! {
-                    let #target = #name  { #items };
+                    let #target = #name { #items };
+                });
+            }
+            Instruction::Construct(target, Constructable::TaggedEnum { name, discriminant, values }) => {
+                let target = emit_register(*target);
+                let items = flatten(
+                    values
+                        .iter()
+                        .map(|x| {
+                            let x = emit_register(*x);
+                            quote! {#x, }
+                        })
+                        .collect::<Vec<_>>(),
+                );
+                let name = emit_ident(name);
+                let discriminant = emit_ident(discriminant);
+                statements.push(quote! {
+                    let #target = #name::#discriminant(#items);
+                });
+            }
+            Instruction::Construct(target, Constructable::TaggedEnumStruct { name, discriminant, values }) => {
+                let target = emit_register(*target);
+                let items = flatten(
+                    values
+                        .iter()
+                        .map(|(name, x)| {
+                            let x = emit_register(*x);
+                            let name = emit_ident(name);
+                            quote! {#name: #x,}
+                        })
+                        .collect::<Vec<_>>(),
+                );
+                let name = emit_ident(name);
+                let discriminant = emit_ident(discriminant);
+                statements.push(quote! {
+                    let #target = #name::#discriminant { #items };
                 });
             }
             Instruction::Constrict(stream, new_stream, len) => {
@@ -339,6 +374,26 @@ fn prepare_decode(
                     };
                 });
             }
+            Instruction::ConditionalPredicate(condition, inner) => {
+                let condition = emit_register(*condition);
+                let inner = prepare_decode(context, &inner[..], is_async, false);
+                statements.push(quote! {
+                    if #condition {
+                        #inner
+                    }
+                });
+            },
+            Instruction::Return(result) => {
+                let result = emit_register(*result);
+                statements.push(quote! {
+                    return Ok(#result);
+                });
+            },
+            Instruction::Error(e) => {
+                statements.push(quote! {
+                    return Err(DecodeError(#e.to_string()).into());
+                });
+            },
         }
     }
 
@@ -350,9 +405,7 @@ fn prepare_decode(
 
 pub fn prepare_decoder(coder: &Context, is_async: bool) -> TokenStream {
     let decode = prepare_decode(&coder, &coder.instructions[..], is_async, true);
-    let out_reg = emit_register(coder.register_count - 1);
     quote! {
         #decode
-        Ok(#out_reg)
     }
 }

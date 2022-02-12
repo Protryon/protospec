@@ -181,3 +181,4 @@ Example implementation:
 * generics for types
 * support array-interior transformations & conditions in ASG
 * add ability to reference original field in transform
+* handle referencing optionals in expressions

@@ -82,18 +82,17 @@ impl fmt::Display for Tag {
 impl fmt::Display for Payload {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Payload { byte: Some(byte), .. } => write!(f, "{}", byte)?,
-            Payload { short: Some(short), .. } => write!(f, "{}", short)?,
-            Payload { int: Some(int), .. } => write!(f, "{}", int)?,
-            Payload { long: Some(long), .. } => write!(f, "{}", long)?,
-            Payload { float: Some(float), .. } => write!(f, "{}", float)?,
-            Payload { double: Some(double), .. } => write!(f, "{}", double)?,
-            Payload { string: Some(string), .. } => write!(f, "\"{}\"", string.value)?,
-            Payload { list: Some(list), .. } => write!(f, "{}", list)?,
-            Payload { compound: Some(compound), .. } => write!(f, "{}", compound)?,
-            Payload { int_array: Some(int_array), .. } => write!(f, "{}", int_array)?,
-            Payload { long_array: Some(long_array), .. } => write!(f, "{}", long_array)?,
-            _ => unreachable!("invalid payload"),
+            Payload::Byte(byte) => write!(f, "{}", byte)?,
+            Payload::Short(short) => write!(f, "{}", short)?,
+            Payload::Int(int) => write!(f, "{}", int)?,
+            Payload::Long(long) => write!(f, "{}", long)?,
+            Payload::Float(float) => write!(f, "{}", float)?,
+            Payload::Double(double) => write!(f, "{}", double)?,
+            Payload::String(string) => write!(f, "\"{}\"", string.value)?,
+            Payload::List(list) => write!(f, "{}", list)?,
+            Payload::Compound(compound) => write!(f, "{}", compound)?,
+            Payload::IntArray(int_array) => write!(f, "{}", int_array)?,
+            Payload::LongArray(long_array) => write!(f, "{}", long_array)?,
         }
         Ok(())
     }

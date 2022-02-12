@@ -216,6 +216,7 @@ impl fmt::Display for LengthConstraint {
 pub struct ContainerType {
     pub length: Option<Expression>,
     pub items: IndexMap<String, Arc<Field>>,
+    pub is_enum: Cell<bool>,
 }
 
 impl ContainerType {

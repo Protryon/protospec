@@ -551,6 +551,8 @@ fn parse_container(t: &mut TokenIter) -> ParseResult<Container> {
         None
     };
 
+    let flags = parse_flags(t)?;
+
     t.expect(Token::LeftCurly)?;
 
     let mut items = vec![];
@@ -573,6 +575,7 @@ fn parse_container(t: &mut TokenIter) -> ParseResult<Container> {
     Ok(Container {
         span: start + end,
         length,
+        flags,
         items,
     })
 }

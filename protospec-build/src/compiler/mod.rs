@@ -66,6 +66,14 @@ pub fn compile_program(program: &Program, options: &CompileOptions) -> TokenStre
             }
         }
         impl Error for DecodeError {}
+        #[derive(Debug)]
+        pub struct EncodeError(pub String);
+        impl std::fmt::Display for EncodeError {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "{}", self.0)
+            }
+        }
+        impl Error for EncodeError {}
     });
     for (name, field) in program.types.iter() {
         match &*field.type_.borrow() {
@@ -234,11 +242,7 @@ pub fn emit_type_ref(item: &Type) -> TokenStream {
     }
 }
 
-pub fn generate_container(
-    name: &str,
-    item: &ContainerType,
-    options: &CompileOptions,
-) -> TokenStream {
+fn generate_container_fields(access: TokenStream, item: &ContainerType) -> TokenStream {
     let mut fields = vec![];
     for (name, field) in item.flatten_view() {
         let name_ident = format_ident!("{}", name);
@@ -252,17 +256,59 @@ pub fn generate_container(
         };
 
         fields.push(quote! {
-            pub #name_ident: #type_ref,
+            #access #name_ident: #type_ref,
         });
     }
-    let fields = flatten(fields);
-    let name_ident = format_ident!("{}", global_name(name));
-    let derives = options.emit_derives(&[]);
+    flatten(fields)
+}
 
-    quote! {
-        #derives
-        pub struct #name_ident {
-            #fields
+pub fn generate_container(
+    name: &str,
+    item: &ContainerType,
+    options: &CompileOptions,
+) -> TokenStream {
+    let derives = options.emit_derives(&[]);
+    let name_ident = format_ident!("{}", global_name(name));
+    if item.is_enum.get() {
+        let mut fields = vec![];
+        for (name, field) in &item.items {
+            let name_ident = format_ident!("{}", name);
+            let type_ = field.type_.borrow();
+            let type_ref = match &*type_ {
+                Type::Container(sub_container) => {
+                    let subfields = generate_container_fields(quote! { }, &**sub_container);
+                    quote! {
+                        {
+                            #subfields
+                        }
+                    }
+                },
+                type_ => {
+                    let emitted = emit_type_ref(type_);
+                    quote! { (#emitted) }
+                }
+            };
+    
+            fields.push(quote! {
+                #name_ident#type_ref,
+            });
+        }
+        let fields = flatten(fields);
+
+        quote! {
+            #derives
+            pub enum #name_ident {
+                #fields
+            }
+        }
+    } else {
+        let fields = generate_container_fields(quote! { pub }, item);
+    
+        quote! {
+            #derives
+            pub struct #name_ident {
+                #fields
+            }
         }
     }
 }

@@ -31,18 +31,18 @@ type LongArray = container {
     value: i64[len],
 };
 
-type Payload(t: Tag) = container {
-    byte: i8 {t == Tag::Byte},
-    short: i16 {t == Tag::Short},
-    int: i32 {t == Tag::Int},
-    long: i64 {t == Tag::Long},
-    float: f32 {t == Tag::Float},
-    double: f64 {t == Tag::Double},
-    string: NBTString {t == Tag::String},
-    list: List {t == Tag::List},
-    compound: Compound {t == Tag::Compound},
-    int_array: IntArray {t == Tag::IntArray},
-    long_array: LongArray {t == Tag::LongArray},
+type Payload(t: Tag) = container +tagged_enum {
+    Byte: i8 {t == Tag::Byte},
+    Short: i16 {t == Tag::Short},
+    Int: i32 {t == Tag::Int},
+    Long: i64 {t == Tag::Long},
+    Float: f32 {t == Tag::Float},
+    Double: f64 {t == Tag::Double},
+    String: NBTString {t == Tag::String},
+    List: List {t == Tag::List},
+    Compound: Compound {t == Tag::Compound},
+    IntArray: IntArray {t == Tag::IntArray},
+    LongArray: LongArray {t == Tag::LongArray},
 };
 
 type CompoundItem = container {

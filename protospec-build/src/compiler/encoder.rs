@@ -18,76 +18,6 @@ fn emit_target(target: &Target) -> TokenStream {
     }
 }
 
-fn interpret_sync(statements: &mut Vec<TokenStream>, instruction: &Instruction) {
-    match instruction {
-        Instruction::ConditionalWrapStream(
-            condition,
-            prelude,
-            stream,
-            new_stream,
-            owned_new_stream,
-            transformer,
-            args,
-        ) => {
-            let condition = emit_register(*condition);
-            let new_stream_value = emit_register(*new_stream);
-            let owned_new_stream = emit_register(*owned_new_stream);
-            let args = args.iter().map(|x| emit_register(*x)).collect::<Vec<_>>();
-            let input = emit_target(stream);
-            let transformed = transformer.inner.encoding_gen(input.clone(), args, false);
-            let prelude = prepare_encode(&prelude[..], false, false);
-
-            //todo: would be nicer to use generics here instead of trait object
-            statements.push(quote! {
-                let mut #owned_new_stream = None;
-                let #new_stream_value: &mut dyn Write = if #condition {
-                    #prelude
-                    #owned_new_stream = Some(#transformed);
-                    #owned_new_stream.as_mut().unwrap()
-                } else {
-                    #input as &mut dyn Write
-                };
-            })
-        }
-        _ => unreachable!("bad instruction in interpret_sync"),
-    }
-}
-
-fn interpret_async(statements: &mut Vec<TokenStream>, instruction: &Instruction) {
-    match instruction {
-        Instruction::ConditionalWrapStream(
-            condition,
-            prelude,
-            stream,
-            new_stream,
-            owned_new_stream,
-            transformer,
-            args,
-        ) => {
-            let condition = emit_register(*condition);
-            let new_stream_value = emit_register(*new_stream);
-            let owned_new_stream = emit_register(*owned_new_stream);
-            let args = args.iter().map(|x| emit_register(*x)).collect::<Vec<_>>();
-            let input = emit_target(stream);
-            let transformed = transformer.inner.encoding_gen(input.clone(), args, true);
-            let prelude = prepare_encode(&prelude[..], true, false);
-
-            //todo: would be nicer to use generics here instead of trait object
-            statements.push(quote! {
-                let mut #owned_new_stream = None;
-                let #new_stream_value: &mut dyn AsyncWrite + Send + Sync + Unpin = if #condition {
-                    #prelude
-                    #owned_new_stream = Some(#transformed);
-                    #owned_new_stream.as_mut().unwrap()
-                } else {
-                    #input as &mut dyn AsyncWrite + Send + Sync + Unpin
-                };
-            })
-        }
-        _ => unreachable!("bad instruction in interpret_async"),
-    }
-}
-
 fn prepare_encode(instructions: &[Instruction], is_async: bool, is_root: bool) -> TokenStream {
     let async_ = map_async(is_async);
     let mut statements = vec![];
@@ -184,7 +114,11 @@ fn prepare_encode(instructions: &[Instruction], is_async: bool, is_root: bool) -
                 let destination = emit_register(*destination);
 
                 statements.push(quote! {
-                    let #destination = #target.as_ref().expect(#message); // proper error message
+                    let #destination = if let Some(#destination) = &#target {
+                        #destination
+                    } else {
+                        return Err(EncodeError(#message.to_string()).into())
+                    };
                 });
             }
             Instruction::Conditional(condition, if_true, if_false) => {
@@ -318,13 +252,92 @@ fn prepare_encode(instructions: &[Instruction], is_async: bool, is_root: bool) -
                     });
                 }
             }
-            instruction => {
-                if is_async {
-                    interpret_async(&mut statements, instruction);
+            Instruction::ConditionalWrapStream(
+                condition,
+                prelude,
+                stream,
+                new_stream,
+                owned_new_stream,
+                transformer,
+                args,
+            ) => {
+                let condition = emit_register(*condition);
+                let new_stream_value = emit_register(*new_stream);
+                let owned_new_stream = emit_register(*owned_new_stream);
+                let args = args.iter().map(|x| emit_register(*x)).collect::<Vec<_>>();
+                let input = emit_target(stream);
+                let transformed = transformer.inner.encoding_gen(input.clone(), args, is_async);
+                let prelude = prepare_encode(&prelude[..], is_async, false);
+    
+                let trait_name = if is_async {
+                    quote! { dyn AsyncWrite + Send + Sync + Unpin }
                 } else {
-                    interpret_sync(&mut statements, instruction);
-                }
+                    quote! { dyn Write }
+                };
+
+                //todo: would be nicer to use generics here instead of trait object
+                statements.push(quote! {
+                    let mut #owned_new_stream = None;
+                    let #new_stream_value: &mut #trait_name = if #condition {
+                        #prelude
+                        #owned_new_stream = Some(#transformed);
+                        #owned_new_stream.as_mut().unwrap()
+                    } else {
+                        #input as &mut #trait_name
+                    };
+                })
             }
+            Instruction::UnwrapEnum(enum_name, discriminant, original, checked, message) => {
+                let enum_name = emit_ident(enum_name);
+                let discriminant = emit_ident(discriminant);
+                let original = emit_register(*original);
+                let checked = emit_register(*checked);
+
+                statements.push(quote! {
+                    let #checked = if let #enum_name::#discriminant(#checked) = &#original {
+                        #checked
+                    } else {
+                        return Err(EncodeError(#message.to_string()).into())
+                    };
+                });
+            },
+            Instruction::UnwrapEnumStruct(enum_name, discriminant, original, checked, message) => {
+                let enum_name = emit_ident(enum_name);
+                let discriminant = emit_ident(discriminant);
+                let original = emit_register(*original);
+                // let checked = emit_register(*checked);
+                let mut checked_name_list = quote! {};
+                let mut checked_reg_list = quote! {};
+                for (name, checked) in checked.iter().rev() {
+                    let name = emit_ident(name);
+                    let checked = emit_register(*checked);
+                    checked_name_list = quote! { #name: #checked, #checked_name_list };
+                    checked_reg_list = quote! { #checked, #checked_reg_list };
+                }
+
+                statements.push(quote! {
+                    let (#checked_reg_list) = if let #enum_name::#discriminant { #checked_name_list } = &#original {
+                        (#checked_reg_list)
+                    } else {
+                        return Err(EncodeError(#message.to_string()).into())
+                    };
+                });
+            },
+            Instruction::BreakBlock(instructions) => {
+                //todo: support nested breakblocks?
+                let interior = prepare_encode(&instructions[..], is_async, false);
+                statements.push(quote! {
+                    'bb: loop {
+                        #interior
+                        break 'bb;
+                    }
+                });
+            }, 
+            Instruction::Break => {
+                statements.push(quote! {
+                    break 'bb;
+                });
+            },    
         }
     }
 

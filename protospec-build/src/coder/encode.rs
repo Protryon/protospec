@@ -39,6 +39,12 @@ pub enum Instruction {
     // original, checked, message
     NullCheck(usize, usize, String),
     Conditional(usize, Vec<Instruction>, Vec<Instruction>), // condition, if_true, if_false
+    /// enum name, discriminant, original, checked, message
+    UnwrapEnum(String, String, usize, usize, String),
+    /// enum name, discriminant, original, checked: (enumstruct field name, checked), message
+    UnwrapEnumStruct(String, String, usize, Vec<(String, usize)>, String),
+    BreakBlock(Vec<Instruction>),
+    Break,
 }
 
 #[derive(Debug)]
@@ -79,22 +85,101 @@ impl Context {
         self.encode_field(Target::Direct, top, top, field);
     }
 
-    pub fn encode_field(
-        &mut self,
-        mut target: Target,
-        root: usize,
-        source: usize,
-        field: &Arc<Field>,
-    ) {
-        let field_condition = if let Some(condition) = field.condition.borrow().as_ref() {
+    fn encode_field_condition(&mut self, field: &Arc<Field>) -> Option<usize> {
+        if let Some(condition) = field.condition.borrow().as_ref() {
             let value = self.alloc_register();
             self.instructions
                 .push(Instruction::Eval(value, condition.clone()));
             Some(value)
         } else {
             None
-        };
+        }
+    }
+
+    pub fn encode_field(
+        &mut self,
+        target: Target,
+        root: usize,
+        source: usize,
+        field: &Arc<Field>,
+    ) {
+        let field_condition = self.encode_field_condition(field);
         let start = self.instructions.len();
+        
+        self.encode_field_unconditional(target, root, source, field, field_condition.is_some());
+
+        if let Some(field_condition) = field_condition {
+            let drained = self.instructions.drain(start..).collect();
+            self.instructions
+                .push(Instruction::Conditional(field_condition, drained, vec![]));
+        }
+    }
+
+    fn encode_container_items(&mut self, container: &ContainerType, buf_target: Target, root: usize, source: usize) {
+        let mut resolved = vec![];
+
+        for (name, child) in container.items.iter() {
+            if child.is_auto.get() || matches!(&*child.type_.borrow(), Type::Container(_)) {
+                continue;
+            }
+            let value = self.alloc_register();
+            self.instructions.push(Instruction::GetField(
+                value,
+                root,
+                vec![FieldRef::Name(name.clone())],
+            ));
+            resolved.push(value);
+        }
+        self.encode_container_items_resolved(container, buf_target, root, source, resolved.into_iter());
+    }
+
+    fn encode_container_items_resolved(&mut self, container: &ContainerType, buf_target: Target, root: usize, source: usize, mut resolved: impl Iterator<Item = usize>) {
+        let mut auto_target = vec![];
+        for (_, child) in container.items.iter() {
+            if child.is_auto.get() {
+                let new_target = self.alloc_register();
+                self.instructions.push(Instruction::AllocDynBuf(new_target));
+                auto_target.push((new_target, child));
+                continue;
+            }
+            let (real_target, auto_field) = auto_target
+                .last()
+                .map(|x| (Target::Buf(x.0), Some(&x.1)))
+                .unwrap_or_else(|| (buf_target, None));
+            if matches!(&*child.type_.borrow(), Type::Container(_)) {
+                //TODO: this may not work
+                self.encode_field(real_target, root, source, child);
+            } else {
+                self.encode_field(real_target, root, resolved.next().expect("malformed resolved"), child);
+            }
+            if let Some(auto_field) = auto_field {
+                if let Some(resolved) = self.resolved_autos.get(&auto_field.name).copied() {
+                    let auto_field = *auto_field;
+                    let (auto_target, target_auto_field) = auto_target.pop().unwrap();
+                    if auto_field.name != target_auto_field.name {
+                        panic!("+auto tags must be declared and used in a hierarchical manner");
+                    }
+                    self.encode_field(buf_target, root, resolved, auto_field);
+                    self.instructions
+                        .push(Instruction::EmitBuf(buf_target, auto_target));
+                } else {
+                    panic!("unresolved +auto field: {}", auto_field.name);
+                }
+            }
+        }
+        for (_, auto_field) in auto_target {
+            panic!("unused auto field: {}", auto_field.name);
+        }
+    }
+
+    fn encode_field_unconditional(
+        &mut self,
+        mut target: Target,
+        root: usize,
+        source: usize,
+        field: &Arc<Field>,
+        was_conditional: bool,
+    ) {
         let mut new_streams = vec![];
 
         for transform in field.transforms.borrow().iter() {
@@ -140,14 +225,7 @@ impl Context {
             target = Target::Stream(new_stream);
         }
 
-        // let (buf_target, buf) = if field.transforms.borrow().len() > 0 {
-        //     let buf = self.alloc_register();
-        //     self.instructions.push(Instruction::AllocDynBuf(buf));
-        //     (Target::Buf(buf), Some(buf))
-        // } else {
-        //     (target, None)
-        // };
-        let source = if field_condition.is_some() {
+        let source = if was_conditional {
             let real_source = self.alloc_register();
             self.instructions.push(Instruction::NullCheck(
                 source,
@@ -173,41 +251,69 @@ impl Context {
                 } else {
                     target
                 };
-                let mut auto_target = vec![];
-                for (name, child) in c.items.iter() {
-                    if child.is_auto.get() {
-                        let new_target = self.alloc_register();
-                        self.instructions.push(Instruction::AllocDynBuf(new_target));
-                        auto_target.push((new_target, child));
-                        continue;
-                    }
-                    let (real_target, auto_field) = auto_target
-                        .last()
-                        .map(|x| (Target::Buf(x.0), Some(&x.1)))
-                        .unwrap_or_else(|| (buf_target, None));
-                    if matches!(&*child.type_.borrow(), Type::Container(_)) {
-                        self.encode_field(real_target, root, source, child);
-                    } else {
-                        let value = self.alloc_register();
-                        self.instructions.push(Instruction::GetField(
-                            value,
-                            root,
-                            vec![FieldRef::Name(name.clone())],
-                        ));
-                        self.encode_field(real_target, root, value, child);
-                    }
-                    if let Some(auto_field) = auto_field {
-                        if let Some(resolved) = self.resolved_autos.get(&auto_field.name).copied() {
-                            let auto_field = *auto_field;
-                            let (auto_target, _) = auto_target.pop().unwrap();
-                            self.encode_field(buf_target, root, resolved, auto_field);
+                if c.is_enum.get() {
+                    let break_start = self.instructions.len();
+                    for (name, child) in c.items.iter() {
+                        let condition = self.encode_field_condition(child);
+                        let start = self.instructions.len();
+                        let unwrapped = self.alloc_register();
+
+                        let subtype = child.type_.borrow();
+                        match &*subtype {
+                            Type::Container(c) => {
+
+                                let mut unwrapped = vec![];
+                                let mut fields = vec![];
+                                for (subname, subchild) in c.flatten_view() {
+                                    if !matches!(&*subchild.type_.borrow(), Type::Container(_)) {
+                                        let alloced = self.alloc_register();
+                                        unwrapped.push((
+                                            subname.clone(),
+                                            alloced,
+                                        ));
+                                        fields.push(alloced);
+                                    }
+                                }
+
+                                self.instructions.push(Instruction::UnwrapEnumStruct(
+                                    field.name.clone(),
+                                    name.clone(),
+                                    source,
+                                    unwrapped,
+                                    "mismatch betweeen condition and enum discriminant".to_string(),
+                                ));
+
+                                self.encode_container_items_resolved(c, buf_target, root, source, fields.into_iter());
+                                self.instructions.push(Instruction::Break);
+                            },
+                            _ => {
+                                self.instructions.push(Instruction::UnwrapEnum(
+                                    field.name.clone(),
+                                    name.clone(),
+                                    source,
+                                    unwrapped,
+                                    "mismatch betweeen condition and enum discriminant".to_string(),
+                                ));
+        
+                                self.encode_field_unconditional(buf_target, unwrapped, unwrapped, child, false);
+                                self.instructions.push(Instruction::Break);
+                            },
+                        }
+
+                        if let Some(condition) = condition {
+                            let drained = self.instructions.drain(start..).collect();
                             self.instructions
-                                .push(Instruction::EmitBuf(buf_target, auto_target));
-                        } else {
-                            panic!("unresolved +auto field");
+                                .push(Instruction::Conditional(condition, drained, vec![]));
                         }
                     }
+                    let drained = self.instructions.drain(break_start..).collect();
+                    self.instructions
+                        .push(Instruction::BreakBlock(drained));
+
+                } else {
+                    self.encode_container_items(c, buf_target, root, source);
                 }
+
                 if let Some(length) = &c.length {
                     match length {
                         Expression::FieldRef(f) if f.is_auto.get() => {
@@ -240,38 +346,6 @@ impl Context {
                 self.instructions.push(Instruction::Drop(*owned_stream));
             }
         }
-
-        // for transform in field.transforms.borrow().iter() {
-        //     let condition = if let Some(condition) = &transform.condition {
-        //         let value = self.alloc_register();
-        //         self.instructions.push(Instruction::Eval(value, condition.clone()));
-        //         Some(value)
-        //     } else {
-        //         None
-        //     };
-
-        //     let transform_start = self.instructions.len();
-        //     let mut args = vec![];
-        //     for arg in transform.arguments.iter() {
-        //         let r = self.alloc_register();
-        //         self.instructions.push(Instruction::Eval(r, arg.clone()));
-        //         args.push(r);
-        //     }
-        //     self.instructions.push(Instruction::MutateBuf(buf.unwrap(), transform.transform.clone(), args));
-        //     if let Some(condition) = condition {
-        //         let drained = self.instructions.drain(transform_start..).collect();
-        //         self.instructions.push(Instruction::Conditional(condition, drained));
-        //     }
-        // }
-
-        if let Some(field_condition) = field_condition {
-            let drained = self.instructions.drain(start..).collect();
-            self.instructions
-                .push(Instruction::Conditional(field_condition, drained, vec![]));
-        }
-        // if let Some(buf) = buf {
-        //     self.instructions.push(Instruction::EmitBuf(target, buf));
-        // }
     }
 
     pub fn encode_type(&mut self, target: Target, source: usize, type_: &Type) {

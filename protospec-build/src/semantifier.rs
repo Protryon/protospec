@@ -70,8 +70,12 @@ pub enum AsgError {
     InvalidTypeArgumentOrder(Span),
     #[error("illegal repitition of container or enum, outline the container/enum as a top level type declaration")]
     InlineRepetition(Span),
-    #[error("invalid or unknown flag")]
-    InvalidFlag(Span),
+    #[error("invalid or unknown flag '{0}'")]
+    InvalidFlag(String, Span),
+    #[error("enum containers must be top level")]
+    EnumContainerMustBeToplevel(Span),
+    #[error("cannot have field after unconditional field in enum container")]
+    EnumContainerFieldAfterUnconditional(Span),
     #[error("unknown")]
     Unknown(#[from] crate::Error),
 }
@@ -358,7 +362,7 @@ impl Program {
                                 defined.span,
                             ));
                         }
-                        let type_ = Scope::convert_ast_type(&scope, &cons.type_.raw_type)?;
+                        let type_ = Scope::convert_ast_type(&scope, &cons.type_.raw_type, true)?;
                         match type_ {
                             Type::Container(_) | Type::Enum(_) => {
                                 return Err(AsgError::ConstTypeDefinition(
@@ -504,7 +508,7 @@ impl Scope {
         let mut arguments = vec![];
         if let Some(ast_arguments) = ast_arguments {
             for argument in ast_arguments {
-                let target_type = Scope::convert_ast_type(&sub_scope, &argument.type_.raw_type)?;
+                let target_type = Scope::convert_ast_type(&sub_scope, &argument.type_.raw_type, false)?;
                 sub_scope.borrow_mut().declared_inputs.insert(
                     argument.name.name.clone(),
                     Arc::new(Input {
@@ -535,7 +539,7 @@ impl Scope {
             None
         };
 
-        let asg_type = Scope::convert_ast_type(&sub_scope, &field.type_.raw_type)?;
+        let asg_type = Scope::convert_ast_type(&sub_scope, &field.type_.raw_type, into.toplevel)?;
 
         let mut transforms = vec![];
         for ast::Transform {
@@ -580,7 +584,7 @@ impl Scope {
                 "auto" => {
                     is_auto = true;
                 }
-                _ => return Err(AsgError::InvalidFlag(flag.span)),
+                x => return Err(AsgError::InvalidFlag(x.to_string(), flag.span)),
             }
         }
 
@@ -593,7 +597,7 @@ impl Scope {
         Ok(())
     }
 
-    fn convert_ast_type(self_: &Arc<RefCell<Scope>>, typ: &ast::RawType) -> AsgResult<Type> {
+    fn convert_ast_type(self_: &Arc<RefCell<Scope>>, typ: &ast::RawType, toplevel: bool) -> AsgResult<Type> {
         Ok(match typ {
             ast::RawType::Container(value) => {
                 let length = value
@@ -603,6 +607,19 @@ impl Scope {
                         Scope::convert_expr(self_, &**x, PartialType::Scalar(Some(ScalarType::U64)))
                     })
                     .transpose()?;
+
+                let mut is_enum = false;
+                for flag in &value.flags {
+                    match &*flag.name {
+                        "tagged_enum" => is_enum = true,
+                        x => return Err(AsgError::InvalidFlag(x.to_string(), flag.span)),
+                    }
+                }
+
+                if !toplevel && is_enum {
+                    return Err(AsgError::EnumContainerMustBeToplevel(value.span));
+                }
+                
                 let mut items: IndexMap<String, Arc<Field>> = IndexMap::new();
                 let sub_scope = Arc::new(RefCell::new(Scope {
                     parent_scope: Some(self_.clone()),
@@ -610,6 +627,9 @@ impl Scope {
                     declared_fields: IndexMap::new(),
                     declared_inputs: IndexMap::new(),
                 }));
+
+                let mut had_unconditional_field = false;
+
                 for (name, typ) in value.items.iter() {
                     if let Some(defined) = items.get(&name.name) {
                         return Err(AsgError::ContainerFieldRedefinition(
@@ -632,6 +652,13 @@ impl Scope {
 
                     Scope::convert_ast_field(&sub_scope, typ, &field_out, None)?;
 
+                    if had_unconditional_field && is_enum {
+                        return Err(AsgError::EnumContainerFieldAfterUnconditional(typ.span))
+                    }
+                    if field_out.condition.borrow().is_none() {
+                        had_unconditional_field = true;
+                    }
+
                     sub_scope
                         .borrow_mut()
                         .declared_fields
@@ -639,7 +666,11 @@ impl Scope {
                     items.insert(name.name.clone(), field_out);
                 }
 
-                Type::Container(Box::new(ContainerType { length, items }))
+                Type::Container(Box::new(ContainerType {
+                    length,
+                    items,
+                    is_enum: Cell::new(is_enum),
+                }))
             }
             ast::RawType::Enum(value) => {
                 let mut items: IndexMap<String, Arc<Const>> = IndexMap::new();
@@ -698,7 +729,7 @@ impl Scope {
             ast::RawType::Scalar(value) => Type::Scalar(value.clone()),
             ast::RawType::Array(value) => {
                 let length = Scope::convert_length(self_, &value.length)?;
-                let element = Scope::convert_ast_type(self_, &value.element.type_.raw_type)?;
+                let element = Scope::convert_ast_type(self_, &value.element.type_.raw_type, false)?;
                 match &element {
                     Type::Container(_) | Type::Enum(_) => {
                         return Err(AsgError::InlineRepetition(value.span));
@@ -905,7 +936,7 @@ impl Scope {
                     }
                     _ => (),
                 }
-                let target = Scope::convert_ast_type(self_, &expr.type_.raw_type)?;
+                let target = Scope::convert_ast_type(self_, &expr.type_.raw_type, false)?;
                 if !expected_type.assignable_from(&target) {
                     return Err(AsgError::UnexpectedType(
                         target.to_string(),
