@@ -393,7 +393,7 @@ fn parse_type(t: &mut TokenIter, direct_array: bool) -> ParseResult<Type> {
                         let name = Ident { name, span };
                         let mut span = name.span;
                         let arguments = parse_arguments(t, &mut span)?;
-                        RawType::Ref(TypeCall {
+                        RawType::Ref(TypeRef {
                             name,
                             arguments,
                             span,
@@ -422,7 +422,7 @@ fn parse_type(t: &mut TokenIter, direct_array: bool) -> ParseResult<Type> {
             let end = t.expect(Token::RightSquare)?;
             out = Type {
                 span: start + end,
-                raw_type: RawType::Array(ArrayType {
+                raw_type: RawType::Array(Array {
                     element: Box::new(Field {
                         type_: out,
                         condition: None,
@@ -524,7 +524,7 @@ fn parse_field(t: &mut TokenIter) -> ParseResult<Field> {
         out = Field {
             type_: Type {
                 span: out.span + end,
-                raw_type: RawType::Array(ArrayType {
+                raw_type: RawType::Array(Array {
                     span: out.span + end,
                     element: Box::new(out),
                     length,
