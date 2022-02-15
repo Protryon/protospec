@@ -1,6 +1,6 @@
 use proc_macro2::TokenStream;
 
-use crate::{asg::{Type, TypeArgument}, PartialType, ScalarType};
+use crate::{asg::{Type, TypeArgument}, PartialType, ScalarType, PartialScalarType};
 
 
 pub type ForeignTypeObj = Box<dyn ForeignType + 'static>;
@@ -31,7 +31,9 @@ pub trait ForeignType {
         match type_ {
             PartialType::Type(t) => self.assignable_from(t),
             PartialType::Any => true,
-            PartialType::Scalar(Some(scalar)) => self.assignable_from(&Type::Scalar(*scalar)),
+            PartialType::Scalar(PartialScalarType::Some(scalar)) |
+            PartialType::Scalar(PartialScalarType::Defaults(scalar))
+                => self.assignable_from(&Type::Scalar(*scalar)),
             _ => false,
         }
     }
@@ -41,7 +43,9 @@ pub trait ForeignType {
         match type_ {
             PartialType::Type(t) => self.assignable_to(t),
             PartialType::Any => true,
-            PartialType::Scalar(Some(scalar)) => self.assignable_to(&Type::Scalar(*scalar)),
+            PartialType::Scalar(PartialScalarType::Some(scalar)) |
+            PartialType::Scalar(PartialScalarType::Defaults(scalar))
+                => self.assignable_to(&Type::Scalar(*scalar)),
             _ => false,
         }
     }

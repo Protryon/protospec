@@ -25,7 +25,7 @@ impl Scope {
                     Some(expr) => Scope::convert_expr(
                         self_,
                         &**expr,
-                        PartialType::Scalar(Some(type_.rep)),
+                        PartialType::Scalar(PartialScalarType::Some(type_.rep)),
                     )?,
                     None => Expression::Binary(BinaryExpression {
                         op: crate::BinaryOp::Add,

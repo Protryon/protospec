@@ -13,7 +13,7 @@ impl Scope {
                     self_,
                     inner,
                     if typ.expandable {
-                        PartialType::Array(Some(Box::new(PartialType::Scalar(Some(
+                        PartialType::Array(Some(Box::new(PartialType::Scalar(PartialScalarType::Some(
                             ScalarType::U8,
                         )))))
                     } else {

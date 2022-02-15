@@ -10,7 +10,7 @@ impl Scope {
             .length
             .as_ref()
             .map(|x| {
-                Scope::convert_expr(self_, &**x, PartialType::Scalar(None))
+                Scope::convert_expr(self_, &**x, PartialType::Scalar(PartialScalarType::Defaults(ScalarType::U64)))
             })
             .transpose()?;
 

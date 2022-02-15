@@ -23,7 +23,7 @@ impl Scope {
             }
             ast::UnaryOp::Negate | ast::UnaryOp::BitNot => {
                 if let Some(inner_type) = inner.get_type() {
-                    if !PartialType::Scalar(None).assignable_from(&inner_type) {
+                    if !PartialType::Scalar(PartialScalarType::None).assignable_from(&inner_type) {
                         return Err(AsgError::UnexpectedType(
                             inner_type.to_string(),
                             "integer".to_string(),

@@ -20,7 +20,7 @@ impl Scope {
             _ => ()
         }
         let init_expected_type = match expr.op {
-            Lt | Gt | Lte | Gte => PartialType::Scalar(None),
+            Lt | Gt | Lte | Gte => PartialType::Scalar(PartialScalarType::None),
             Eq | Ne => PartialType::Any,
             Or | And => PartialType::Type(Type::Bool),
             _ => expected_type.clone(),

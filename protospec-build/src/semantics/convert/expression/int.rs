@@ -8,8 +8,9 @@ impl Scope {
     ) -> AsgResult<Int> {
         match (&expected_type, &expr.type_) {
             (x, Some(y)) if x.assignable_from(&Type::Scalar(*y)) => (),
-            (PartialType::Scalar(Some(_)), None) => (),
-            (PartialType::Scalar(None), Some(_)) => (),
+            (PartialType::Scalar(PartialScalarType::Some(_)), None) => (),
+            (PartialType::Scalar(PartialScalarType::Defaults(_)), _) => (),
+            (PartialType::Scalar(PartialScalarType::None), Some(_)) => (),
             (PartialType::Any, Some(_)) => (),
             (x, Some(y)) => {
                 return Err(AsgError::UnexpectedType(
@@ -28,7 +29,8 @@ impl Scope {
         }
         let type_ = match (&expected_type, &expr.type_) {
             (_, Some(s)) => *s,
-            (PartialType::Scalar(Some(s)), _) => *s,
+            (PartialType::Scalar(PartialScalarType::Some(s)), _) => *s,
+            (PartialType::Scalar(PartialScalarType::Defaults(s)), _) => *s,
             _ => unimplemented!(),
         };
         Ok(Int {

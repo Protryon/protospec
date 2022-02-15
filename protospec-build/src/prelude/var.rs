@@ -1,4 +1,4 @@
-use crate::{emit_type_ref, PartialType};
+use crate::{emit_type_ref, PartialType, PartialScalarType};
 
 use super::*;
 
@@ -32,7 +32,9 @@ impl ForeignType for VarInt {
     fn assignable_from_partial(&self, type_: &PartialType) -> bool {
         match type_ {
             PartialType::Type(t) => self.assignable_from(t),
-            PartialType::Scalar(Some(scalar)) => self.assignable_from(&Type::Scalar(*scalar)),
+            PartialType::Scalar(PartialScalarType::Some(scalar)) |
+            PartialType::Scalar(PartialScalarType::Defaults(scalar))
+                => self.assignable_from(&Type::Scalar(*scalar)),
             _ => false,
         }
     }
@@ -41,8 +43,8 @@ impl ForeignType for VarInt {
         match type_ {
             PartialType::Type(t) => self.assignable_to(t),
             PartialType::Any => true,
-            PartialType::Scalar(Some(scalar)) => self.assignable_from(&Type::Scalar(*scalar)),
-            PartialType::Scalar(None) => true,
+            PartialType::Scalar(PartialScalarType::Some(scalar)) => self.assignable_from(&Type::Scalar(*scalar)),
+            PartialType::Scalar(_) => true,
             _ => false,
         }
     }
