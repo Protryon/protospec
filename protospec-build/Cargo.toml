@@ -1,6 +1,6 @@
 [package]
 name = "protospec-build"
-version = "0.1.1"
+version = "0.2.0"
 authors = ["Protryon <max.bruce12@gmail.com>"]
 edition = "2018"
 description = "One binary format language to rule them all, One binary format language to find them, One binary format language to bring them all and in the darkness bind them."

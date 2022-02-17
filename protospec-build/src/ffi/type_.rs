@@ -70,7 +70,7 @@ pub trait ForeignType {
     /**
      * output code should be a single statement that:
      *  1. takes an expression `field_ref` as a reference to a value of the foreign type
-     *   2. the statement should write its output to an implicit identifier `writer` as a `&mut W` where W: Write
+     *  2. the statement should write its output to an implicit identifier `writer` as a `&mut W` where W: Write
     */
     fn encoding_gen(
         &self,
