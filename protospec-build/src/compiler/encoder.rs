@@ -203,6 +203,13 @@ fn prepare_encode(instructions: &[Instruction], is_async: bool, is_root: bool) -
                     #target.write_all(&(*#value as #type_).to_be_bytes()[..])#async_?;
                 });
             }
+            Instruction::EncodeBitfield(target, value) => {
+                let target = emit_target(target);
+                let value = emit_register(*value);
+                statements.push(quote! {
+                    #target.write_all(&(#value.0).to_be_bytes()[..])#async_?;
+                });
+            }
             Instruction::EncodePrimitive(target, data, PrimitiveType::Bool) => {
                 let target = emit_target(target);
                 let data = emit_register(*data);
@@ -220,6 +227,22 @@ fn prepare_encode(instructions: &[Instruction], is_async: bool, is_root: bool) -
             Instruction::EncodePrimitiveArray(target, data, type_, len) => {
                 let target = emit_target(target);
                 let data = emit_register(*data);
+                let writing = match type_ {
+                    PrimitiveType::Bool => {
+                        quote! {
+                            for x in #data.iter() {
+                                #target.write_all(&[if x { 1u8 } else { 0u8 }])#async_?;
+                            }
+                        }
+                    },
+                    _ => {
+                        quote! {
+                            for x in #data.iter() {
+                                #target.write_all(&x.to_be_bytes()[..])#async_?;
+                            }
+                        }
+                    },
+                };
                 if let Some(len) = len {
                     let len = emit_register(*len);
                     statements.push(quote! {
@@ -229,25 +252,13 @@ fn prepare_encode(instructions: &[Instruction], is_async: bool, is_root: bool) -
                                 //todo: throw an error properly
                                 assert_eq!(t_count, #data.len());
                             }
-                            let t_borrow = &#data[..];
-                            let t_borrow2 = unsafe {
-                                let len = t_borrow.len() * mem::size_of::<#type_>();
-                                let ptr = #data.as_ptr() as *const u8;
-                                slice::from_raw_parts(ptr, len)
-                            };
-                            #target.write_all(&t_borrow2[..])#async_?;
+                            #writing
                         }
                     });
                 } else {
                     statements.push(quote! {
                         {
-                            let t_borrow = &#data[..];
-                            let t_borrow2 = unsafe {
-                                let len = t_borrow.len() * mem::size_of::<#type_>();
-                                let ptr = #data.as_ptr() as *const u8;
-                                slice::from_raw_parts(ptr, len)
-                            };
-                            #target.write_all(&t_borrow2[..])#async_?;
+                            #writing
                         }
                     });
                 }

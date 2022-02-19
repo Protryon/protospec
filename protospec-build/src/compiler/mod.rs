@@ -15,13 +15,35 @@ pub fn global_name(input: &str) -> String {
     input.to_string()
 }
 
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Debug)]
 pub struct CompileOptions {
     pub enum_derives: Vec<String>,
     pub struct_derives: Vec<String>,
     pub include_async: bool,
     pub use_anyhow: bool,
     pub debug_mode: bool,
+}
+
+impl Default for CompileOptions {
+    fn default() -> Self {
+        Self {
+            include_async: false,
+            debug_mode: false,
+            enum_derives: vec![
+                "PartialEq".to_string(),
+                "Debug".to_string(),
+                "Clone".to_string(),
+                "Default".to_string(),
+            ],
+            struct_derives: vec![
+                "PartialEq".to_string(),
+                "Debug".to_string(),
+                "Clone".to_string(),
+                "Default".to_string(),
+            ],
+            use_anyhow: false,
+        }
+    }
 }
 
 impl CompileOptions {
@@ -127,6 +149,9 @@ pub fn compile_program(program: &Program, options: &CompileOptions) -> TokenStre
             }
             Type::Enum(item) => {
                 components.push(generate_enum(&name, item, options));
+            }
+            Type::Bitfield(item) => {
+                components.push(generate_bitfield(&name, item, options));
             }
             generic => {
                 let ident = format_ident!("{}", global_name(name));
@@ -268,6 +293,7 @@ pub fn emit_type_ref(item: &Type) -> TokenStream {
     match item {
         Type::Container(_) => unimplemented!(),
         Type::Enum(_) => unimplemented!(),
+        Type::Bitfield(_) => unimplemented!(),
         Type::Scalar(s) => emit_ident(&s.to_string()),
         Type::Array(array_type) => {
             let interior = emit_type_ref(&array_type.element.type_.borrow());
@@ -424,6 +450,7 @@ pub fn generate_enum(name: &str, item: &EnumType, options: &CompileOptions) -> T
 
     let from_repr_matches = flatten(from_repr_matches);
     let rep = format_ident!("{}", item.rep.to_string());
+    let rep_size = item.rep.size() as usize;
     let derives = options.emit_enum_derives(&["Clone", "Copy"]);
 
     let format_string = format!("illegal enum value '{{}}' for enum '{}'", name);
@@ -456,8 +483,100 @@ pub fn generate_enum(name: &str, item: &EnumType, options: &CompileOptions) -> T
                     x => Err(decode_error(format!(#format_string, x)).into()),
                 }
             }
+
+            pub fn to_be_bytes(&self) -> [u8; #rep_size] {
+                (self as #rep).to_be_bytes()
+            }
         }
 
         #default_impl
+    }
+}
+
+pub fn generate_bitfield(name: &str, item: &BitfieldType, options: &CompileOptions) -> TokenStream {
+    let name_ident = format_ident!("{}", global_name(name));
+    let mut fields = vec![];
+    let mut all_fields = ConstInt::parse(item.rep, "0", crate::Span::default()).unwrap();
+    let zero = all_fields;
+
+    for (name, cons) in item.items.iter() {
+        let value_ident = format_ident!("{}", name);
+        let value = eval_const_expression(&cons.value);
+        if value.is_none() {
+            unimplemented!("could not resolve constant expression");
+        }
+        let value = value.unwrap();
+        let int_value = match &value {
+            ConstValue::Int(x) => *x,
+            _ => panic!("invalid const value type"),
+        };
+        if (int_value & all_fields).unwrap() != zero {
+            panic!("overlapping bit fields");
+        }
+        all_fields = (all_fields | int_value).unwrap();
+
+        let value = value.emit();
+        fields.push(quote! {
+            pub const #value_ident: Self = Self(#value);
+        });
+    }
+    let fields = flatten(fields);
+
+    let rep = format_ident!("{}", item.rep.to_string());
+    let rep_size = item.rep.size() as usize;
+    let derives = options.emit_struct_derives(&["Clone", "Copy", "Default"]);
+
+    let format_string = format!("illegal bitfield value '{{}}' for bitfield '{}'", name);
+    let all_fields = ConstValue::Int(all_fields).emit();
+
+    quote! {
+        #[repr(transparent)]
+        #derives
+        pub struct #name_ident(pub #rep);
+
+        impl #name_ident {
+            #fields
+            pub const ALL: Self = Self(#all_fields);
+
+            pub fn from_repr(repr: #rep) -> Result<Self> {
+                if (repr & !Self::ALL.0) != 0 {
+                    Err(decode_error(format!(#format_string, repr)).into())
+                } else {
+                    Ok(Self(repr))
+                }
+            }
+
+            pub fn to_be_bytes(&self) -> [u8; #rep_size] {
+                self.0.to_be_bytes()
+            }
+        }
+
+        impl core::ops::BitOr for #name_ident {
+            type Output = Self;
+            fn bitor(self, rhs: Self) -> Self {
+                Self(self.0 | rhs.0)
+            }
+        }
+
+        impl core::ops::BitAnd for #name_ident {
+            type Output = Self;
+            fn bitand(self, rhs: Self) -> Self {
+                Self(self.0 & rhs.0)
+            }
+        }
+
+        impl core::ops::BitXor for #name_ident {
+            type Output = Self;
+            fn bitxor(self, rhs: Self) -> Self {
+                Self(self.0 ^ rhs.0)
+            }
+        }
+
+        impl core::ops::Not for #name_ident {
+            type Output = Self;
+            fn not(self) -> Self {
+                Self(!self.0)
+            }
+        }
     }
 }

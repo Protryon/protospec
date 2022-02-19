@@ -43,9 +43,10 @@ pub enum Instruction {
 
     DecodeForeign(Target, usize, Arc<ForeignType>, Vec<usize>),
     DecodeRef(Target, usize, String, Vec<usize>),
-    DecodeEnum(String, PrimitiveType, usize, Target),
+    DecodeRepr(String, PrimitiveType, usize, Target),
     DecodePrimitive(Target, usize, PrimitiveType),
     DecodePrimitiveArray(Target, usize, PrimitiveType, Option<usize>),
+    DecodeReprArray(Target, usize, String, PrimitiveType, Option<usize>),
     // target, register of length
     Skip(Target, usize),
 
@@ -99,6 +100,7 @@ impl Context {
             Type::Foreign(_) => (),
             Type::Container(_) => (),
             Type::Enum(_) => (),
+            Type::Bitfield(_) => (),
             _ => {
                 if let Some(old_value) = value {
                     let extra_value = self.alloc_register();
@@ -349,14 +351,27 @@ impl Context {
                     && c.element.transforms.borrow().len() == 0
                     && terminator.is_none()
                 {
-                    match &*c.element.type_.borrow() {
+                    let type_ = c.element.type_.borrow();
+                    let type_ = type_.resolved();
+                    match &*type_ {
                         // todo: const-length type optimizations for container/array/foreign
                         Type::Container(_) | Type::Array(_) | Type::Foreign(_) | Type::Ref(_) => (),
                         Type::Enum(x) => {
-                            self.instructions.push(Instruction::DecodePrimitiveArray(
+                            self.instructions.push(Instruction::DecodeReprArray(
                                 source,
                                 output,
-                                PrimitiveType::Scalar(x.rep),
+                                field.name.clone(),
+                                PrimitiveType::Scalar(x.rep.clone()),
+                                len,
+                            ));
+                            return Some(output);
+                        }
+                        Type::Bitfield(x) => {
+                            self.instructions.push(Instruction::DecodeReprArray(
+                                source,
+                                output,
+                                field.name.clone(),
+                                PrimitiveType::Scalar(x.rep.clone()),
                                 len,
                             ));
                             return Some(output);
@@ -413,7 +428,16 @@ impl Context {
                 output
             }
             Type::Enum(e) => {
-                self.instructions.push(Instruction::DecodeEnum(
+                self.instructions.push(Instruction::DecodeRepr(
+                    field.name.clone(),
+                    PrimitiveType::Scalar(e.rep.clone()),
+                    output,
+                    source,
+                ));
+                output
+            }
+            Type::Bitfield(e) => {
+                self.instructions.push(Instruction::DecodeRepr(
                     field.name.clone(),
                     PrimitiveType::Scalar(e.rep.clone()),
                     output,

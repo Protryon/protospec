@@ -31,6 +31,8 @@ pub enum AsgError {
     IllegalComplexTypeDefinition(Span),
     #[error("enum variant name already in use: '{0}' @ {1}, originally declared at {2}")]
     EnumVariantRedefinition(String, Span, Span),
+    #[error("bitfield flag name already in use: '{0}' @ {1}, originally declared at {2}")]
+    BitfieldFlagRedefinition(String, Span, Span),
     #[error("container field name already in use: '{0}' @ {1}, originally declared at {2}")]
     ContainerFieldRedefinition(String, Span, Span),
     #[error("referenced type '{0}' @ {1} not found")]
@@ -61,7 +63,7 @@ pub enum AsgError {
     InvalidTypeArgumentCount(usize, usize, usize, Span),
     #[error("cannot have required arguments after optional arguments for type @ {0}")]
     InvalidTypeArgumentOrder(Span),
-    #[error("illegal repitition of container or enum, outline the container/enum as a top level type declaration @ {0}")]
+    #[error("illegal repitition of container, enum, or bitfield -- outline the container/enum as a top level type declaration @ {0}")]
     InlineRepetition(Span),
     #[error("invalid or unknown flag '{0}' @ {1}")]
     InvalidFlag(String, Span),

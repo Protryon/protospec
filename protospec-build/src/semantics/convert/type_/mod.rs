@@ -4,6 +4,8 @@ mod container;
 
 mod enum_;
 
+mod bitfield;
+
 mod array;
 
 mod type_ref;
@@ -17,6 +19,9 @@ impl Scope {
             }
             ast::RawType::Enum(type_) => {
                 Self::convert_enum_type(self_, type_)?
+            }
+            ast::RawType::Bitfield(type_) => {
+                Self::convert_bitfield_type(self_, type_)?
             }
             ast::RawType::Scalar(type_) => {
                 Type::Scalar(type_.clone())

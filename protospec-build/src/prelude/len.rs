@@ -12,6 +12,12 @@ impl LenFunction {
                     #size
                 }
             }
+            Type::Bitfield(e) => {
+                let size = e.rep.size();
+                quote! {
+                    #size
+                }
+            }
             Type::F32 => quote! { 4u64 },
             Type::F64 => quote! { 8u64 },
             Type::Bool => quote! { 1u64 },

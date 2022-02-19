@@ -9,6 +9,9 @@ pub use container::*;
 mod enum_;
 pub use enum_::*;
 
+mod bitfield;
+pub use bitfield::*;
+
 mod foreign;
 pub use foreign::*;
 
@@ -19,6 +22,7 @@ pub use type_ref::*;
 pub enum Type {
     Container(Box<ContainerType>),
     Enum(EnumType),
+    Bitfield(BitfieldType),
     Scalar(ScalarType),
     Array(Box<ArrayType>),
     Foreign(Arc<ForeignType>),
@@ -44,6 +48,13 @@ impl fmt::Display for Type {
             }
             Type::Enum(c) => {
                 write!(f, "enum {} {{\n", c.rep)?;
+                for (name, cons) in c.items.iter() {
+                    write!(f, "  {} = {}", name, cons.value)?;
+                }
+                write!(f, "\n}}\n")
+            }
+            Type::Bitfield(c) => {
+                write!(f, "bitfield {} {{\n", c.rep)?;
                 for (name, cons) in c.items.iter() {
                     write!(f, "  {} = {}", name, cons.value)?;
                 }
@@ -96,6 +107,7 @@ impl Type {
             (Type::Foreign(f1), t2) => f1.obj.assignable_from(t2),
             (Type::Container(c1), Type::Container(c2)) => c1 == c2,
             (Type::Enum(e1), Type::Enum(e2)) => e1 == e2,
+            (Type::Bitfield(e1), Type::Bitfield(e2)) => e1 == e2,
             (Type::Scalar(s1), Type::Scalar(s2)) => s2 == s1,
             (Type::Array(a1), Type::Array(a2)) => a1 == a2,
             (Type::F32, Type::F32) => true,
@@ -108,12 +120,22 @@ impl Type {
     pub fn can_coerce_to(&self, other: &Type) -> bool {
         match (self.resolved().as_ref(), other.resolved().as_ref()) {
             (Type::Enum(e1), Type::Scalar(scalar_type))
-                if scalar_type.can_implicit_cast_to(&e1.rep) =>
+                if e1.rep.can_implicit_cast_to(scalar_type) =>
+            {
+                true
+            }
+            (Type::Bitfield(e1), Type::Scalar(scalar_type))
+                if e1.rep.can_implicit_cast_to(scalar_type) =>
             {
                 true
             }
             (Type::Scalar(scalar_type), Type::Enum(e1))
-                if e1.rep.can_implicit_cast_to(scalar_type) =>
+                if scalar_type.can_implicit_cast_to(&e1.rep) =>
+            {
+                true
+            }
+            (Type::Scalar(scalar_type), Type::Bitfield(e1))
+                if scalar_type.can_implicit_cast_to(&e1.rep) =>
             {
                 true
             }
@@ -132,6 +154,8 @@ impl Type {
             (Type::F64, Type::F32) => true,
             (Type::F32, Type::Scalar(_)) => true,
             (Type::F64, Type::Scalar(_)) => true,
+            (Type::Scalar(_), Type::F32) => true,
+            (Type::Scalar(_), Type::F64) => true,
             _ => false,
         }
     }

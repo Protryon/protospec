@@ -69,10 +69,7 @@ pub fn compile(name: &str, input: &str) {
 }
 
 fn compile_test_program(program: &Program, test: TokenStream) -> String {
-    let options = CompileOptions {
-        include_async: false,
-        ..Default::default()
-    };
+    let options = CompileOptions::default();
     let compiled = compiler::compile_program(&program, &options);
     let compiled_test = quote! {
         pub type test_type = Box<u32>;
@@ -167,6 +164,38 @@ fn test_compiler_enum() {
     };
 
     compile("enum", &compile_test_program(&asg, test));
+}
+
+#[test]
+fn test_compiler_bitfield() {
+    let asg = load_asg(
+        r#"
+    type test = bitfield u32 {
+        v1 = 0x01,
+        v2,
+        v4 = 0x10,
+        v9 = 0x100,
+    };
+    "#,
+    )
+    .unwrap();
+
+    let test = quote! {
+        fn roundtrip(item: test) {
+            let mut out = vec![];
+            item.encode_sync(&mut out).expect("failed to encode");
+            let decoded = test::decode_sync(&mut &out[..]).expect("failed to decode");
+            assert_eq!(item, decoded);
+        }
+        roundtrip(test::v1 | test::v2);
+        assert_eq!(test::decode_sync(&mut &0u32.to_be_bytes()[..]).unwrap(), test(0));
+        assert_eq!(test::decode_sync(&mut &2u32.to_be_bytes()[..]).unwrap(), test::v2);
+        assert_eq!(test::decode_sync(&mut &3u32.to_be_bytes()[..]).unwrap(), test::v2 | test::v1);
+        assert_eq!(test::decode_sync(&mut &0x101u32.to_be_bytes()[..]).unwrap(), test::v9 | test::v1);
+        test::decode_sync(&mut &0x200u32.to_be_bytes()[..]).err().unwrap();
+    };
+
+    compile("bitfield", &compile_test_program(&asg, test));
 }
 
 #[test]

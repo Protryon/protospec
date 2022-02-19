@@ -12,12 +12,16 @@ pub use array::parse_length_constraint;
 mod enum_;
 use enum_::*;
 
+mod bitfield;
+use bitfield::*;
+
 pub fn parse_type(t: &mut TokenIter, direct_array: bool) -> ParseResult<Type> {
     let start = t.peek_span()?;
 
     let raw_type = match t.peek()? {
         Token::Container => RawType::Container(parse_container(t)?),
         Token::Enum => RawType::Enum(parse_enum(t)?),
+        Token::Bitfield => RawType::Bitfield(parse_bitfield(t)?),
         _ => {
             if let Some(scalar) = parse_scalar_type(t) {
                 RawType::Scalar(scalar)

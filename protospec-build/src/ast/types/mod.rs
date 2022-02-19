@@ -12,6 +12,9 @@ pub use container::*;
 mod enum_;
 pub use enum_::*;
 
+mod bitfield;
+pub use bitfield::*;
+
 mod type_ref;
 pub use type_ref::*;
 
@@ -26,10 +29,17 @@ impl_node!(Type);
 pub enum RawType {
     Container(Container),
     Enum(Enum),
+    Bitfield(Bitfield),
     Scalar(ScalarType),
     Array(Array),
     F32,
     F64,
     Bool,
     Ref(TypeRef),
+}
+
+impl RawType {
+    pub fn is_inlinable(&self) -> bool {
+        !matches!(self, RawType::Container(_) | RawType::Enum(_) | RawType::Bitfield(_))
+    }
 }

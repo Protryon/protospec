@@ -28,6 +28,7 @@ pub enum Instruction {
     EncodeForeign(Target, usize, Arc<ForeignType>, Vec<usize>),
     EncodeRef(Target, usize, Vec<usize>),
     EncodeEnum(PrimitiveType, Target, usize),
+    EncodeBitfield(Target, usize),
     EncodePrimitive(Target, usize, PrimitiveType),
     EncodePrimitiveArray(Target, usize, PrimitiveType, Option<usize>),
     // target, register of length
@@ -81,6 +82,7 @@ impl Context {
             Type::Foreign(_) => return,
             Type::Container(_) => (),
             Type::Enum(_) => (),
+            Type::Bitfield(_) => (),
             _ => {
                 self.instructions
                     .push(Instruction::GetField(0, 0, vec![FieldRef::TupleAccess(0)]))
@@ -266,7 +268,7 @@ impl Context {
 
                                 let mut unwrapped = vec![];
                                 for (subname, subchild) in c.flatten_view() {
-                                    if subchild.is_auto.get() || subchild.is_pad.get() || matches!(&*subchild.type_.borrow(), Type::Container(_)) {
+                                    if subchild.is_pad.get() || matches!(&*subchild.type_.borrow(), Type::Container(_)) {
                                         continue;
                                     }
                                     let alloced = self.alloc_register();
@@ -414,18 +416,29 @@ impl Context {
                     && c.element.transforms.borrow().len() == 0
                     && terminator.is_none()
                 {
-                    match &*c.element.type_.borrow() {
+                    let type_ = c.element.type_.borrow();
+                    let type_ = type_.resolved();
+                    match &*type_ {
                         // todo: const-length type optimizations for container/array/foreign
                         Type::Container(_) | Type::Array(_) | Type::Foreign(_) | Type::Ref(_) => (),
-                        Type::Enum(x) => {
+                        Type::Enum(e) => {
                             self.instructions.push(Instruction::EncodePrimitiveArray(
                                 target,
                                 source,
-                                PrimitiveType::Scalar(x.rep),
+                                PrimitiveType::Scalar(e.rep),
                                 len,
                             ));
                             return;
-                        }
+                        },
+                        Type::Bitfield(e) => {
+                            self.instructions.push(Instruction::EncodePrimitiveArray(
+                                target,
+                                source,
+                                PrimitiveType::Scalar(e.rep),
+                                len,
+                            ));
+                            return;
+                        },
                         Type::Scalar(x) => {
                             self.instructions.push(Instruction::EncodePrimitiveArray(
                                 target,
@@ -497,6 +510,12 @@ impl Context {
             Type::Enum(e) => {
                 self.instructions.push(Instruction::EncodeEnum(
                     PrimitiveType::Scalar(e.rep.clone()),
+                    target,
+                    source,
+                ));
+            }
+            Type::Bitfield(_) => {
+                self.instructions.push(Instruction::EncodeBitfield(
                     target,
                     source,
                 ));

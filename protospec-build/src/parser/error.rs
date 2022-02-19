@@ -15,6 +15,8 @@ pub enum ParseError {
     EmptyLengthConstraint(Span),
     #[error("enum is missing representation scalar")]
     EnumMissingRep(Span),
+    #[error("bitfield is missing representation scalar")]
+    BitfieldMissingRep(Span),
     #[error("unknown container directive '{0}' @ {1}'")]
     UnknownContainerDirective(String, Span),
 

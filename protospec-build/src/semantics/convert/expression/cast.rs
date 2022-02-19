@@ -6,11 +6,8 @@ impl Scope {
         expr: &ast::CastExpression,
         _expected_type: PartialType,
     ) -> AsgResult<CastExpression> {
-        match &expr.type_.raw_type {
-            ast::RawType::Container(_) | ast::RawType::Enum(_) => {
-                return Err(AsgError::CastTypeDefinition(expr.span));
-            }
-            _ => (),
+        if !expr.type_.raw_type.is_inlinable() {
+            return Err(AsgError::CastTypeDefinition(expr.span));
         }
         let target = Scope::convert_ast_type(self_, &expr.type_.raw_type, false)?;
 

@@ -235,19 +235,18 @@ fn prepare_decode(
                     });
                 }
             }
-            Instruction::DecodeEnum(name, type_, value, target) => {
+            Instruction::DecodeRepr(name, type_, value, target) => {
                 let target = emit_target(target);
                 let value = emit_register(*value);
 
                 let enum_ident = format_ident!("{}", &name);
-                let rep = format_ident!("{}", type_.to_string());
                 let length = type_.size() as usize;
 
                 statements.push(quote! {
                     let #value = {
                         let mut scratch = [0u8; #length];
                         #target.read_exact(&mut scratch[..])#async_?;
-                        #enum_ident::from_repr(#rep::from_be_bytes((&scratch[..]).try_into()?))?
+                        #enum_ident::from_repr(#type_::from_be_bytes((&scratch[..]).try_into()?))?
                     };
                 });
             }
@@ -284,16 +283,10 @@ fn prepare_decode(
                     statements.push(quote! {
                         let #data = {
                             let t_count = #len as usize;
-                            let mut t: Vec<#type_> = Vec::with_capacity(t_count);
-                            unsafe { t.set_len(t_count); }
-                            let t_borrow = &mut t[..];
-                            let t_borrow2 = unsafe {
-                                let len = t_borrow.len() * mem::size_of::<#type_>();
-                                let ptr = t.as_ptr() as *mut u8;
-                                slice::from_raw_parts_mut(ptr, len)
-                            };
-                            #target.read_exact(&mut t_borrow2[..])#async_?;
-                            t
+                            let size = mem::size_of::<#type_>();
+                            let mut raw: Vec<u8> = Vec::with_capacity(t_count * size);
+                            #target.read_exact(&mut raw[..])#async_?;
+                            raw.chunks_exact(size).map(|x| #type_::from_be_bytes(x.try_into().unwrap())).collect()
                         };
                     });
                 } else {
@@ -301,9 +294,32 @@ fn prepare_decode(
                         let #data = {
                             let mut t: Vec<u8> = Vec::new();
                             #target.read_to_end(&mut t)#async_?;
-                            let t = Box::leak(t.into_boxed_slice());
-                            let size = t.len() / mem::size_of::<#type_>();
-                            unsafe { Vec::<#type_>::from_raw_parts(t.as_mut_ptr() as *mut #type_, size, size) }
+                            raw.chunks_exact(size).map(|x| #type_::from_be_bytes(x.try_into().unwrap())).collect()
+                        };
+                    });
+                }
+            }
+            Instruction::DecodeReprArray(target, data, name, type_, len) => {
+                let target = emit_target(target);
+                let data = emit_register(*data);
+                let enum_ident = format_ident!("{}", &name);
+                if let Some(len) = len {
+                    let len = emit_register(*len);
+                    statements.push(quote! {
+                        let #data = {
+                            let t_count = #len as usize;
+                            let size = mem::size_of::<#type_>();
+                            let mut raw: Vec<u8> = Vec::with_capacity(t_count * size);
+                            #target.read_exact(&mut raw[..])#async_?;
+                            raw.chunks_exact(size).map(|x| #enum_ident::from_repr(#type_::from_be_bytes(x.try_into().unwrap()))).collect()
+                        };
+                    });
+                } else {
+                    statements.push(quote! {
+                        let #data = {
+                            let mut t: Vec<u8> = Vec::new();
+                            #target.read_to_end(&mut t)#async_?;
+                            raw.chunks_exact(size).map(|x| #enum_ident::from_repr(#type_::from_be_bytes(x.try_into().unwrap()))).collect()
                         };
                     });
                 }

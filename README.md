@@ -181,11 +181,10 @@ Example implementation:
 * generics for types
 * support array-interior transformations & conditions in ASG
 * add ability to reference original field in transform
-* bitmasks
 * default entries in enums
 * more complex handling of auto fields
   * offsets
   * multiple length candidates (i.e. a ternary)
-* padding directive for containers
-* encode optional fields as zeros
+* option to encode optional fields as zeros
 * DCG of top-level field dependencies & field reordering
+* clean up encoding/decoding

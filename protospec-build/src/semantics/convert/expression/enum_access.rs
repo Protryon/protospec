@@ -15,24 +15,28 @@ impl Scope {
                 ))
             }
         };
-        let variant = match &*field.type_.borrow() {
-            Type::Enum(e) => e
-                .items
-                .get(&expr.variant.name)
-                .ok_or(AsgError::UnresolvedEnumVariant(
-                    field.name.clone(),
-                    expr.variant.name.clone(),
-                    expr.variant.span,
-                ))?
-                .clone(),
+        let type_ = field.type_.borrow();
+        let variant = match &*type_ {
+            Type::Enum(e) => &e.items,
+            Type::Bitfield(e) => &e.items,
             _ => {
                 return Err(AsgError::UnexpectedType(
                     field.type_.borrow().to_string(),
-                    "enum".to_string(),
+                    "enum or bitfield".to_string(),
                     expr.span,
                 ));
             }
         };
+        let variant = variant
+            .get(&expr.variant.name)
+            .ok_or(AsgError::UnresolvedEnumVariant(
+                field.name.clone(),
+                expr.variant.name.clone(),
+                expr.variant.span,
+            ))?
+            .clone();
+        drop(type_);
+
         Ok(EnumAccessExpression {
             enum_field: field,
             variant,

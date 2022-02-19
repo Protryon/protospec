@@ -17,7 +17,7 @@ impl Scope {
         }
         let type_ = Scope::convert_ast_type(&scope, &const_.type_.raw_type, true)?;
         match type_ {
-            Type::Container(_) | Type::Enum(_) => {
+            Type::Container(_) | Type::Enum(_) | Type::Bitfield(_) => {
                 return Err(AsgError::ConstTypeDefinition(
                     const_.name.name.clone(),
                     const_.span,

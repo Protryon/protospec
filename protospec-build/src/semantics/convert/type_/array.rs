@@ -8,7 +8,7 @@ impl Scope {
         let length = Scope::convert_length(self_, &type_.length)?;
         let element = Scope::convert_ast_type(self_, &type_.element.type_.raw_type, false)?;
         match &element {
-            Type::Container(_) | Type::Enum(_) => {
+            Type::Container(_) | Type::Enum(_) | Type::Bitfield(_) => {
                 return Err(AsgError::InlineRepetition(type_.span));
             }
             _ => (),

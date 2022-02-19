@@ -161,6 +161,22 @@ fn test_bool() {
 }
 
 #[test]
+fn test_bitfield() {
+    parse(
+        r#"
+    type test = bitfield i32 {
+        test = 1,
+        west,
+        east,
+        north,
+        south,
+    };
+    "#,
+    )
+    .unwrap();
+}
+
+#[test]
 fn test_enum() {
     parse(
         r#"
