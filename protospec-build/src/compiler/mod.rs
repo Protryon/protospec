@@ -175,7 +175,7 @@ pub fn compile_program(program: &Program, options: &CompileOptions) -> TokenStre
     }
     let components = flatten(components);
     quote! {
-        #[allow(unused_imports, unused_parens, unused_variables, dead_code, unused_mut)]
+        #[allow(unused_imports, unused_parens, unused_variables, dead_code, unused_mut, non_upper_case_globals)]
         mod _ps {
             #components
         }
@@ -485,7 +485,7 @@ pub fn generate_enum(name: &str, item: &EnumType, options: &CompileOptions) -> T
             }
 
             pub fn to_be_bytes(&self) -> [u8; #rep_size] {
-                (self as #rep).to_be_bytes()
+                (*self as #rep).to_be_bytes()
             }
         }
 

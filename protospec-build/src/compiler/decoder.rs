@@ -292,8 +292,9 @@ fn prepare_decode(
                 } else {
                     statements.push(quote! {
                         let #data = {
-                            let mut t: Vec<u8> = Vec::new();
-                            #target.read_to_end(&mut t)#async_?;
+                            let mut raw: Vec<u8> = Vec::new();
+                            #target.read_to_end(&mut raw)#async_?;
+                            let size = mem::size_of::<#type_>();
                             raw.chunks_exact(size).map(|x| #type_::from_be_bytes(x.try_into().unwrap())).collect()
                         };
                     });
@@ -317,8 +318,9 @@ fn prepare_decode(
                 } else {
                     statements.push(quote! {
                         let #data = {
-                            let mut t: Vec<u8> = Vec::new();
-                            #target.read_to_end(&mut t)#async_?;
+                            let mut raw: Vec<u8> = Vec::new();
+                            #target.read_to_end(&mut raw)#async_?;
+                            let size = mem::size_of::<#type_>();
                             raw.chunks_exact(size).map(|x| #enum_ident::from_repr(#type_::from_be_bytes(x.try_into().unwrap()))).collect()
                         };
                     });
