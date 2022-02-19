@@ -57,12 +57,14 @@ impl Default for Options {
             include_async: false,
             debug_mode: false,
             enum_derives: vec![
+                "Eq".to_string(),
                 "PartialEq".to_string(),
                 "Debug".to_string(),
                 "Clone".to_string(),
                 "Default".to_string(),
             ],
             struct_derives: vec![
+                "Eq".to_string(),
                 "PartialEq".to_string(),
                 "Debug".to_string(),
                 "Clone".to_string(),

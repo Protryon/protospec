@@ -285,6 +285,7 @@ fn prepare_decode(
                             let t_count = #len as usize;
                             let size = mem::size_of::<#type_>();
                             let mut raw: Vec<u8> = Vec::with_capacity(t_count * size);
+                            unsafe { raw.set_len(t_count * size) };
                             #target.read_exact(&mut raw[..])#async_?;
                             raw.chunks_exact(size).map(|x| #type_::from_be_bytes(x.try_into().unwrap())).collect()
                         };
@@ -311,6 +312,7 @@ fn prepare_decode(
                             let t_count = #len as usize;
                             let size = mem::size_of::<#type_>();
                             let mut raw: Vec<u8> = Vec::with_capacity(t_count * size);
+                            unsafe { raw.set_len(t_count * size) };
                             #target.read_exact(&mut raw[..])#async_?;
                             raw.chunks_exact(size).map(|x| #enum_ident::from_repr(#type_::from_be_bytes(x.try_into().unwrap()))).collect()
                         };

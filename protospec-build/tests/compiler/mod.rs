@@ -187,11 +187,11 @@ fn test_compiler_bitfield() {
             let decoded = test::decode_sync(&mut &out[..]).expect("failed to decode");
             assert_eq!(item, decoded);
         }
-        roundtrip(test::v1 | test::v2);
+        roundtrip(test::V1 | test::V2);
         assert_eq!(test::decode_sync(&mut &0u32.to_be_bytes()[..]).unwrap(), test(0));
-        assert_eq!(test::decode_sync(&mut &2u32.to_be_bytes()[..]).unwrap(), test::v2);
-        assert_eq!(test::decode_sync(&mut &3u32.to_be_bytes()[..]).unwrap(), test::v2 | test::v1);
-        assert_eq!(test::decode_sync(&mut &0x101u32.to_be_bytes()[..]).unwrap(), test::v9 | test::v1);
+        assert_eq!(test::decode_sync(&mut &2u32.to_be_bytes()[..]).unwrap(), test::V2);
+        assert_eq!(test::decode_sync(&mut &3u32.to_be_bytes()[..]).unwrap(), test::V2 | test::V1);
+        assert_eq!(test::decode_sync(&mut &0x101u32.to_be_bytes()[..]).unwrap(), test::V9 | test::V1);
         test::decode_sync(&mut &0x200u32.to_be_bytes()[..]).err().unwrap();
     };
 

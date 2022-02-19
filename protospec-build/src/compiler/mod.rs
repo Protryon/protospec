@@ -502,7 +502,7 @@ pub fn generate_bitfield(name: &str, item: &BitfieldType, options: &CompileOptio
     let zero = all_fields;
 
     for (name, cons) in item.items.iter() {
-        let name_ident = format_ident!("{}", name);
+        let name_ident = format_ident!("{}", name.to_snake().to_uppercase());
         let get_name = format_ident!("{}", name.to_snake());
         let set_name = format_ident!("set_{}", name.to_snake());
         let value = eval_const_expression(&cons.value);
@@ -575,6 +575,12 @@ pub fn generate_bitfield(name: &str, item: &BitfieldType, options: &CompileOptio
             }
         }
 
+        impl core::ops::BitOrAssign for #name_ident {
+            fn bitor_assign(&mut self, rhs: Self) {
+                *self = *self | rhs;
+            }
+        }
+
         impl core::ops::BitAnd for #name_ident {
             type Output = Self;
             fn bitand(self, rhs: Self) -> Self {
@@ -582,10 +588,22 @@ pub fn generate_bitfield(name: &str, item: &BitfieldType, options: &CompileOptio
             }
         }
 
+        impl core::ops::BitAndAssign for #name_ident {
+            fn bitand_assign(&mut self, rhs: Self) {
+                *self = *self & rhs;
+            }
+        }
+
         impl core::ops::BitXor for #name_ident {
             type Output = Self;
             fn bitxor(self, rhs: Self) -> Self {
                 Self(self.0 ^ rhs.0)
+            }
+        }
+
+        impl core::ops::BitXorAssign for #name_ident {
+            fn bitxor_assign(&mut self, rhs: Self) {
+                *self = *self ^ rhs;
             }
         }
 

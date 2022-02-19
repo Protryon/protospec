@@ -185,6 +185,10 @@ Example implementation:
 * more complex handling of auto fields
   * offsets
   * multiple length candidates (i.e. a ternary)
+  * generalized inferrable fields
+    * bitfields
+    * booleans
 * option to encode optional fields as zeros
 * DCG of top-level field dependencies & field reordering
 * clean up encoding/decoding
+* a ton of docs
