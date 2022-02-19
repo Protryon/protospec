@@ -41,22 +41,6 @@ impl Scope {
                 }
                 right
             };
-        match expr.op {
-            Lt | Gt | Lte | Gte | Eq | Ne | Or | And => {
-                // nop
-            }
-            _ => {
-                // deferred to concrete scalar type
-                let left_type = left.as_ref().unwrap().get_type().unwrap();
-                if !expected_type.assignable_from(&left_type) {
-                    return Err(AsgError::UnexpectedType(
-                        left_type.to_string(),
-                        expected_type.to_string(),
-                        expr.span,
-                    ));
-                }
-            }
-        }
         Ok(BinaryExpression {
             op: expr.op.clone(),
             left: Box::new(left.unwrap()),

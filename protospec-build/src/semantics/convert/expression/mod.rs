@@ -30,7 +30,8 @@ impl Scope {
         expected_type: PartialType,
     ) -> AsgResult<Expression> {
         use ast::Expression::*;
-        Ok(match expr {
+        let coerce_to = expected_type.clone();
+        let expression = match expr {
             Binary(expr) => {
                 Expression::Binary(Self::convert_binary_expression(self_, expr, expected_type)?)
             }
@@ -64,6 +65,30 @@ impl Scope {
             Call(expr) => {
                 Expression::Call(Self::convert_call_expression(self_, expr, expected_type)?)
             }
-        })
+        };
+        
+        Ok(expression.assign_to_or_coerce_to(coerce_to, *expr.span())?)
+    }
+}
+
+
+impl Expression {
+    pub(crate) fn assign_to_or_coerce_to(mut self, expected_type: PartialType, span: Span) -> AsgResult<Self> {
+        let type_ = self.get_type().expect("coercion missing type");
+        if !expected_type.assignable_from(&type_) {
+            if expected_type.coercable_from(&type_) {
+                self = Expression::Cast(CastExpression {
+                    inner: Box::new(self),
+                    type_: expected_type.into_type()
+                        .ok_or_else(|| AsgError::UninferredType(span))?,
+                    span,
+                });
+                Ok(self)
+            } else {
+                Err(AsgError::UnexpectedType(type_.to_string(), expected_type.to_string(), span))
+            }
+        } else {
+            Ok(self)
+        }
     }
 }

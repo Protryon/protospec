@@ -46,6 +46,8 @@ pub enum Instruction {
     DecodeEnum(String, PrimitiveType, usize, Target),
     DecodePrimitive(Target, usize, PrimitiveType),
     DecodePrimitiveArray(Target, usize, PrimitiveType, Option<usize>),
+    // target, register of length
+    Skip(Target, usize),
 
     // register representing: internal stream, end index, terminator, output handle, inner
     Loop(
@@ -68,6 +70,7 @@ pub struct Context {
     pub register_count: usize,
     pub field_register_map: HashMap<String, usize>,
     pub instructions: Vec<Instruction>,
+    pub name: String,
 }
 
 impl Context {
@@ -81,6 +84,7 @@ impl Context {
 impl Context {
     pub fn new() -> Context {
         Context {
+            name: String::new(),
             instructions: vec![],
             field_register_map: HashMap::new(),
             register_count: 0,
@@ -89,6 +93,7 @@ impl Context {
 
     pub fn decode_field_top(&mut self, field: &Arc<Field>) {
         assert!(field.toplevel);
+        self.name = field.name.clone();
         let mut value = self.decode_field(Target::Direct, field);
         match &*field.type_.borrow() {
             Type::Foreign(_) => (),
@@ -222,15 +227,17 @@ impl Context {
                             Type::Container(c) => {
                                 let mut values = vec![];
                                 for (subname, subchild) in c.flatten_view() {
-                                    if !matches!(&*subchild.type_.borrow(), Type::Container(_)) {
-                                        values.push((
-                                            subname.clone(),
-                                            *self
-                                                .field_register_map
-                                                .get(&subname)
-                                                .expect("missing field in field_register_map"),
-                                        ));
+                                    if subchild.is_pad.get() || matches!(&*subchild.type_.borrow(), Type::Container(_)) {
+                                        continue;
                                     }
+    
+                                    values.push((
+                                        subname.clone(),
+                                        *self
+                                            .field_register_map
+                                            .get(&subname)
+                                            .expect("missing field in field_register_map"),
+                                    ));
                                 }
 
                                 self.instructions.push(Instruction::Construct(target, Constructable::TaggedEnumStruct {
@@ -273,15 +280,16 @@ impl Context {
                         let emitted = self.alloc_register();
                         let mut items = vec![];
                         for (name, child) in c.flatten_view() {
-                            if !matches!(&*child.type_.borrow(), Type::Container(_)) {
-                                items.push((
-                                    name.clone(),
-                                    *self
-                                        .field_register_map
-                                        .get(&name)
-                                        .expect("missing field in field_register_map"),
-                                ));
+                            if child.is_pad.get() || matches!(&*child.type_.borrow(), Type::Container(_)) {
+                                continue;
                             }
+                            items.push((
+                                name.clone(),
+                                *self
+                                    .field_register_map
+                                    .get(&name)
+                                    .expect("missing field in field_register_map"),
+                            ));
                         }
                         self.instructions.push(Instruction::Construct(
                             emitted,
@@ -296,17 +304,29 @@ impl Context {
                     }
                 }
             }
-            _ => Some(self.decode_type(source, field)),
+            _ => self.decode_type(source, field),
         };
 
         emitted
     }
 
-    pub fn decode_type(&mut self, source: Target, field: &Arc<Field>) -> usize {
+    pub fn decode_type(&mut self, source: Target, field: &Arc<Field>) -> Option<usize> {
         let output = self.alloc_register();
-        match &*field.type_.borrow() {
+        Some(match &*field.type_.borrow() {
             Type::Container(_) => unimplemented!(),
             Type::Array(c) => {
+                if field.is_pad.get() {
+                    let array_type = field.type_.borrow();
+                    let array_type = match &*array_type {
+                        Type::Array(a) => &**a,
+                        _ => panic!("invalid type for pad"),
+                    };
+                    let len = array_type.length.value.as_ref().cloned().unwrap();
+                    let length_register = self.alloc_register();
+                    self.instructions.push(Instruction::Eval(length_register, len));
+                    self.instructions.push(Instruction::Skip(source, length_register));
+                    return None;
+                }
                 let terminator = if c.length.expandable && c.length.value.is_some() {
                     let len = c.length.value.as_ref().cloned().unwrap();
                     let r = self.alloc_register();
@@ -339,7 +359,7 @@ impl Context {
                                 PrimitiveType::Scalar(x.rep),
                                 len,
                             ));
-                            return output;
+                            return Some(output);
                         }
                         Type::Scalar(x) => {
                             self.instructions.push(Instruction::DecodePrimitiveArray(
@@ -348,7 +368,7 @@ impl Context {
                                 PrimitiveType::Scalar(*x),
                                 len,
                             ));
-                            return output;
+                            return Some(output);
                         }
                         Type::F32 => {
                             self.instructions.push(Instruction::DecodePrimitiveArray(
@@ -357,7 +377,7 @@ impl Context {
                                 PrimitiveType::F32,
                                 len,
                             ));
-                            return output;
+                            return Some(output);
                         }
                         Type::F64 => {
                             self.instructions.push(Instruction::DecodePrimitiveArray(
@@ -366,7 +386,7 @@ impl Context {
                                 PrimitiveType::F64,
                                 len,
                             ));
-                            return output;
+                            return Some(output);
                         }
                         Type::Bool => {
                             self.instructions.push(Instruction::DecodePrimitiveArray(
@@ -375,7 +395,7 @@ impl Context {
                                 PrimitiveType::Bool,
                                 len,
                             ));
-                            return output;
+                            return Some(output);
                         }
                     }
                 }
@@ -466,6 +486,6 @@ impl Context {
                 }
                 output
             }
-        }
+        })
     }
 }

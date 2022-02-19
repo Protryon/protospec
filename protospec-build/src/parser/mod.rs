@@ -26,7 +26,7 @@ mod transform;
 use transform::*;
 
 pub fn parse(script: &str) -> ParseResult<Program> {
-    let mut tokens = TokenIter::new(crate::tokenize(script)?);
+    let mut tokens = TokenIter::new(crate::tokenize(script, true)?);
 
     parse_program(&mut tokens)
 }

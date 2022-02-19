@@ -43,8 +43,11 @@ pub use ffi::*;
 #[derive(Clone)]
 pub struct Options {
     pub format_output: bool,
-    pub derives: Vec<String>,
+    pub enum_derives: Vec<String>,
+    pub struct_derives: Vec<String>,
     pub include_async: bool,
+    pub use_anyhow: bool,
+    pub debug_mode: bool,
 }
 
 impl Default for Options {
@@ -52,11 +55,20 @@ impl Default for Options {
         Options {
             format_output: true,
             include_async: false,
-            derives: vec![
+            debug_mode: false,
+            enum_derives: vec![
                 "PartialEq".to_string(),
                 "Debug".to_string(),
                 "Clone".to_string(),
+                "Default".to_string(),
             ],
+            struct_derives: vec![
+                "PartialEq".to_string(),
+                "Debug".to_string(),
+                "Clone".to_string(),
+                "Default".to_string(),
+            ],
+            use_anyhow: false,
         }
     }
 }
@@ -80,8 +92,11 @@ pub fn compile_spec(name: &str, spec: &str, options: &Options) -> AsgResult<()> 
     let program =
         asg::Program::from_ast(&parse(spec).map_err(|x| -> Error { x.into() })?, &resolver)?;
     let compiler_options = CompileOptions {
-        derives: options.derives.clone(),
+        enum_derives: options.enum_derives.clone(),
+        struct_derives: options.struct_derives.clone(),
         include_async: options.include_async,
+        use_anyhow: options.use_anyhow,
+        debug_mode: options.debug_mode,
     };
     let compiled = compiler::compile_program(&program, &compiler_options);
     let mut compiled = compiled.to_string();

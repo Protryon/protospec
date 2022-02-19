@@ -30,13 +30,6 @@ impl Scope {
                             expr.span,
                         ));
                     }
-                    if !expected_type.assignable_from(&inner_type) {
-                        return Err(AsgError::UnexpectedType(
-                            inner_type.to_string(),
-                            expected_type.to_string(),
-                            expr.span,
-                        ));
-                    }
                     if expr.op == ast::UnaryOp::Negate {
                         match inner_type {
                             Type::Scalar(s) if !s.is_signed() => {

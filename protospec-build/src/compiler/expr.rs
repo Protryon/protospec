@@ -309,8 +309,9 @@ pub fn emit_expression<F: Fn(&Arc<Field>) -> TokenStream>(
         EnumAccess(c) => {
             let enum_name = emit_ident(&c.enum_field.name);
             let enum_variant_name = emit_ident(&c.variant.name);
+            let enum_type = emit_type_ref(&c.variant.type_);
             quote! {
-                #enum_name::#enum_variant_name
+                #enum_name::#enum_variant_name as #enum_type
             }
         }
         Int(c) => {

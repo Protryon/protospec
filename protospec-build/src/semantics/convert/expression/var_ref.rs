@@ -4,7 +4,7 @@ impl Scope {
     pub(super) fn convert_ref_expression(
         self_: &Arc<RefCell<Scope>>,
         expr: &ast::Ident,
-        expected_type: PartialType,
+        _expected_type: PartialType,
     ) -> AsgResult<Expression> {
         let expression = if let Some(field) = Scope::resolve_field(self_, &expr.name) {
             Expression::FieldRef(field)
@@ -15,10 +15,6 @@ impl Scope {
         } else {
             return Err(AsgError::UnresolvedVar(expr.name.clone(), expr.span));
         };
-        let type_ = expression.get_type().expect("ref missing type");
-        if !expected_type.assignable_from(&type_) {
-            return Err(AsgError::UnexpectedType(type_.to_string(), expected_type.to_string(), *expr.span()))
-        }
         Ok(expression)
     }
 }

@@ -23,6 +23,7 @@ impl Scope {
             toplevel: false,
             is_auto: Cell::new(false),
             is_maybe_cyclical: Cell::new(false),
+            is_pad: Cell::new(false),
         });
 
         Ok(Type::Array(Box::new(ArrayType {

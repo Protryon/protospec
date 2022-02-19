@@ -72,6 +72,7 @@ impl AsgExpression for Expression {
                     toplevel: false,
                     is_auto: Cell::new(false),
                     is_maybe_cyclical: Cell::new(false),
+                    is_pad: Cell::new(false),
                 }),
                 length: LengthConstraint {
                     expandable: true,

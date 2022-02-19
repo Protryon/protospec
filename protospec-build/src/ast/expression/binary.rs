@@ -9,7 +9,7 @@ pub struct BinaryExpression {
 }
 impl_node!(BinaryExpression);
 
-#[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Clone, Copy, Serialize, Deserialize, PartialEq, Debug)]
 pub enum BinaryOp {
     Lt,
     Gt,

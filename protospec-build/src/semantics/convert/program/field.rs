@@ -25,6 +25,7 @@ impl Scope {
             toplevel: true,
             is_auto: Cell::new(false),
             is_maybe_cyclical: Cell::new(false),
+            is_pad: Cell::new(false),
         });
         // Scope::convert_ast_field(&scope, &type_.value, &field, Some(&type_.arguments[..]))?;
 

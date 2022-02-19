@@ -69,17 +69,6 @@ fn test_container_empty_length() {
 }
 
 #[test]
-fn test_container_empty() {
-    parse(
-        r#"
-    type test = container {};
-    "#,
-    )
-    .err()
-    .unwrap();
-}
-
-#[test]
 fn test_enum_no_init() {
     parse(
         r#"

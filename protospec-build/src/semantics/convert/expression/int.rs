@@ -6,32 +6,15 @@ impl Scope {
         expr: &ast::Int,
         expected_type: PartialType,
     ) -> AsgResult<Int> {
-        match (&expected_type, &expr.type_) {
-            (x, Some(y)) if x.assignable_from(&Type::Scalar(*y)) => (),
-            (PartialType::Scalar(PartialScalarType::Some(_)), None) => (),
-            (PartialType::Scalar(PartialScalarType::Defaults(_)), _) => (),
-            (PartialType::Scalar(PartialScalarType::None), Some(_)) => (),
-            (PartialType::Any, Some(_)) => (),
-            (x, Some(y)) => {
-                return Err(AsgError::UnexpectedType(
-                    y.to_string(),
-                    x.to_string(),
-                    expr.span,
-                ));
-            }
-            (x, _) => {
-                return Err(AsgError::UnexpectedType(
-                    "integer".to_string(),
-                    x.to_string(),
-                    expr.span,
-                ));
-            }
-        }
         let type_ = match (&expected_type, &expr.type_) {
             (_, Some(s)) => *s,
             (PartialType::Scalar(PartialScalarType::Some(s)), _) => *s,
             (PartialType::Scalar(PartialScalarType::Defaults(s)), _) => *s,
-            _ => unimplemented!(),
+            (x, _) => return Err(AsgError::UnexpectedType(
+                "integer".to_string(),
+                x.to_string(),
+                expr.span,
+            )),
         };
         Ok(Int {
             value: ConstInt::parse(type_, &expr.value, expr.span)?,

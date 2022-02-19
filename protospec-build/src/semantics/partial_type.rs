@@ -1,6 +1,6 @@
 use super::*;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum PartialType {
     Type(Type),
     Scalar(PartialScalarType),
@@ -19,23 +19,10 @@ impl PartialType {
     pub fn assignable_from(&self, other: &Type) -> bool {
         match (self, other.resolved().as_ref()) {
             (t1, Type::Foreign(f2)) => f2.obj.assignable_to_partial(t1),
-            (PartialType::Scalar(scalar_type), Type::Enum(e1)) => {
-                match scalar_type {
-                    PartialScalarType::Some(scalar_type) => {
-                        e1.rep.can_implicit_cast_to(scalar_type)
-                    },
-                    _ => true,
-                }
-            }
             (PartialType::Type(x), other) => x.assignable_from(other),
-            (PartialType::Scalar(x), Type::Scalar(y)) => {
-                match x {
-                    PartialScalarType::Some(scalar_type) => {
-                        y.can_implicit_cast_to(&scalar_type)
-                    },
-                    _ => true,
-                }
-            }
+            (PartialType::Scalar(PartialScalarType::Some(x)), other) => Type::Scalar(*x).assignable_from(other),
+            (PartialType::Scalar(PartialScalarType::Defaults(x)), other) => Type::Scalar(*x).assignable_from(other),
+            (PartialType::Scalar(PartialScalarType::None), _) => true,
             (PartialType::Array(None), Type::Array(_)) => true,
             (PartialType::Array(Some(element)), Type::Array(array_type)) => {
                 element.assignable_from(&array_type.element.type_.borrow())
@@ -43,6 +30,34 @@ impl PartialType {
             (PartialType::Any, _) => true,
             _ => false,
         }
+    }
+
+    pub fn coercable_from(&self, other: &Type) -> bool {
+        match (self, other.resolved().as_ref()) {
+            (PartialType::Scalar(PartialScalarType::Some(scalar_type)), Type::Enum(e1))
+                if e1.rep.can_implicit_cast_to(scalar_type) =>
+            {
+                true
+            }
+            (PartialType::Scalar(PartialScalarType::Defaults(scalar_type)), Type::Enum(e1))
+                if e1.rep.can_implicit_cast_to(scalar_type) =>
+            {
+                true
+            }
+            (PartialType::Scalar(PartialScalarType::Some(x)), other) => other.can_coerce_to(&Type::Scalar(*x)),
+            (PartialType::Scalar(PartialScalarType::Defaults(x)), other) => other.can_coerce_to(&Type::Scalar(*x)),
+            (PartialType::Type(x), other) => other.can_coerce_to(x),
+            (_, _) => false,
+        }
+    }
+
+    pub fn into_type(&self) -> Option<Type> {
+        Some(match self {
+            PartialType::Type(t) => t.clone(),
+            PartialType::Scalar(PartialScalarType::Some(s)) => Type::Scalar(*s),
+            PartialType::Scalar(PartialScalarType::Defaults(s)) => Type::Scalar(*s),
+            _ => return None,
+        })
     }
 }
 

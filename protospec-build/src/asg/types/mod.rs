@@ -96,6 +96,17 @@ impl Type {
             (Type::Foreign(f1), t2) => f1.obj.assignable_from(t2),
             (Type::Container(c1), Type::Container(c2)) => c1 == c2,
             (Type::Enum(e1), Type::Enum(e2)) => e1 == e2,
+            (Type::Scalar(s1), Type::Scalar(s2)) => s2 == s1,
+            (Type::Array(a1), Type::Array(a2)) => a1 == a2,
+            (Type::F32, Type::F32) => true,
+            (Type::F64, Type::F32) => true,
+            (Type::Bool, Type::Bool) => true,
+            (_, _) => false,
+        }
+    }
+
+    pub fn can_coerce_to(&self, other: &Type) -> bool {
+        match (self.resolved().as_ref(), other.resolved().as_ref()) {
             (Type::Enum(e1), Type::Scalar(scalar_type))
                 if scalar_type.can_implicit_cast_to(&e1.rep) =>
             {
@@ -106,17 +117,13 @@ impl Type {
             {
                 true
             }
-            (Type::Scalar(s1), Type::Scalar(s2)) => s2.can_implicit_cast_to(s1),
-            (Type::Array(a1), Type::Array(a2)) => a1 == a2,
-            (Type::F32, Type::F32) => true,
-            (Type::F64, Type::F32) => true,
-            (Type::Bool, Type::Bool) => true,
+            (Type::Scalar(s1), Type::Scalar(s2)) => s1.can_implicit_cast_to(s2),
             (_, _) => false,
         }
     }
 
     pub fn can_cast_to(&self, to: &Type) -> bool {
-        if to.assignable_from(self) {
+        if to.assignable_from(self) || to.can_coerce_to(self) {
             return true;
         }
         match (self.resolved().as_ref(), to.resolved().as_ref()) {

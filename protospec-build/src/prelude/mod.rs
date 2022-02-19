@@ -23,8 +23,14 @@ pub use var::*;
 mod utf8;
 pub use utf8::*;
 
+mod utf16;
+pub use utf16::*;
+
 mod len;
 pub use len::*;
+
+mod pad;
+pub use pad::*;
 
 pub fn map_async(is_async: bool) -> TokenStream {
     if is_async {

@@ -17,15 +17,28 @@ pub fn parse_container(t: &mut TokenIter) -> ParseResult<Container> {
 
     let mut items = vec![];
 
-    loop {
+    while !t.peek_token(Token::RightCurly)? {
+        if t.eat(Token::Dot).is_some() {
+            let ident = t.expect_ident()?;
+            match &*ident.name {
+                "pad" => {
+                    t.expect(Token::Colon)?;
+                    let type_ = parse_expression(t)?;
+                    items.push(ContainerItem::Pad(type_));
+                    if !t.eat(Token::Comma).is_some() {
+                        break;
+                    }
+                    continue;
+                },
+                _ => return Err(ParseError::UnknownContainerDirective(ident.name.clone(), ident.span)),
+            }
+        }
+
         let ident = t.expect_ident()?;
         t.expect(Token::Colon)?;
         let type_ = parse_field(t)?;
-        items.push((ident, type_));
+        items.push(ContainerItem::Field(ident, type_));
         if !t.eat(Token::Comma).is_some() {
-            break;
-        }
-        if t.peek_token(Token::RightCurly)? {
             break;
         }
     }

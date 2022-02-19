@@ -117,7 +117,7 @@ fn prepare_encode(instructions: &[Instruction], is_async: bool, is_root: bool) -
                     let #destination = if let Some(#destination) = &#target {
                         #destination
                     } else {
-                        return Err(EncodeError(#message.to_string()).into())
+                        return Err(encode_error(#message).into())
                     };
                 });
             }
@@ -297,7 +297,7 @@ fn prepare_encode(instructions: &[Instruction], is_async: bool, is_root: bool) -
                     let #checked = if let #enum_name::#discriminant(#checked) = &#original {
                         #checked
                     } else {
-                        return Err(EncodeError(#message.to_string()).into())
+                        return Err(encode_error(#message).into())
                     };
                 });
             },
@@ -319,7 +319,7 @@ fn prepare_encode(instructions: &[Instruction], is_async: bool, is_root: bool) -
                     let (#checked_reg_list) = if let #enum_name::#discriminant { #checked_name_list } = &#original {
                         (#checked_reg_list)
                     } else {
-                        return Err(EncodeError(#message.to_string()).into())
+                        return Err(encode_error(#message).into())
                     };
                 });
             },
@@ -337,7 +337,15 @@ fn prepare_encode(instructions: &[Instruction], is_async: bool, is_root: bool) -
                 statements.push(quote! {
                     break 'bb;
                 });
-            },    
+            },
+            Instruction::Pad(target, length) => {
+                let length = emit_register(*length);
+                let target = emit_target(target);
+                //todo: dont alloc on the heap
+                statements.push(quote! {
+                    #target.write_all(&vec![0u8; #length as usize][..])#async_?;
+                });
+            },
         }
     }
 

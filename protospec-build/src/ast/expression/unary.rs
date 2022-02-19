@@ -8,7 +8,7 @@ pub struct UnaryExpression {
 }
 impl_node!(UnaryExpression);
 
-#[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Clone, Copy, Serialize, Deserialize, PartialEq, Debug)]
 pub enum UnaryOp {
     Negate,
     Not,

@@ -69,6 +69,8 @@ pub enum AsgError {
     EnumContainerMustBeToplevel(Span),
     #[error("cannot have field after unconditional field in enum container @ {0}")]
     EnumContainerFieldAfterUnconditional(Span),
+    #[error("cannot have pad in enum container @ {0}")]
+    EnumContainerPad(Span),
     #[error("type `{0}` does not implement auto receiving @ {1}")]
     TypeNotAutoCompatible(String, Span),
     #[error("unknown: {0}")]

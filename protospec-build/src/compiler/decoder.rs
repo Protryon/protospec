@@ -14,6 +14,7 @@ fn emit_target(target: &Target) -> TokenStream {
 }
 
 fn prepare_decode(
+    options: &CompileOptions,
     context: &Context,
     instructions: &[Instruction],
     is_async: bool,
@@ -34,6 +35,12 @@ fn prepare_decode(
     }
 
     for instruction in instructions.iter() {
+        if options.debug_mode {
+            let raw = format!("decode {}: {:?}", context.name, instruction);
+            statements.push(quote! {
+                println!("{}", #raw);
+            });
+        }
         match instruction {
             Instruction::Eval(target, expr) => {
                 let target = emit_register(*target);
@@ -166,7 +173,7 @@ fn prepare_decode(
                 let transformed = transformer
                     .inner
                     .decoding_gen(input.clone(), args, is_async);
-                let prelude = prepare_decode(context, &prelude[..], is_async, false);
+                let prelude = prepare_decode(options, context, &prelude[..], is_async, false);
 
                 //todo: would be nicer to use generics here instead of trait object
                 if is_async {
@@ -303,7 +310,7 @@ fn prepare_decode(
             }
             Instruction::Loop(target, stop_index, terminator, output, inner) => {
                 let output = emit_register(*output);
-                let inner = prepare_decode(context, &inner[..], is_async, false);
+                let inner = prepare_decode(options, context, &inner[..], is_async, false);
                 let stop = stop_index.map(emit_register);
                 let terminator = terminator.map(emit_register);
                 let target = emit_target(target);
@@ -344,8 +351,8 @@ fn prepare_decode(
 
                             {
                                 let mut #target = Cursor::new(r);
-                                let #target = &mut reader;
-                                while reader.position() < r_len {
+                                let #target = &mut #target;
+                                while #target.position() < r_len {
                                     #inner
                                 }
                             }
@@ -364,7 +371,7 @@ fn prepare_decode(
                 let target = emit_register(*target);
                 let interior = emit_register(*interior);
                 let condition = emit_register(*condition);
-                let inner = prepare_decode(context, &inner[..], is_async, false);
+                let inner = prepare_decode(options, context, &inner[..], is_async, false);
                 statements.push(quote! {
                     let #target = if #condition {
                         #inner
@@ -376,7 +383,7 @@ fn prepare_decode(
             }
             Instruction::ConditionalPredicate(condition, inner) => {
                 let condition = emit_register(*condition);
-                let inner = prepare_decode(context, &inner[..], is_async, false);
+                let inner = prepare_decode(options, context, &inner[..], is_async, false);
                 statements.push(quote! {
                     if #condition {
                         #inner
@@ -391,7 +398,15 @@ fn prepare_decode(
             },
             Instruction::Error(e) => {
                 statements.push(quote! {
-                    return Err(DecodeError(#e.to_string()).into());
+                    return Err(decode_error(#e).into());
+                });
+            },
+            Instruction::Skip(target, len) => {
+                let target = emit_target(target);
+                let len = emit_register(*len);
+                statements.push(quote! {
+                    let mut big_scratch = vec![0u8; #len as usize];
+                    #target.read_exact(&mut big_scratch[..])#async_?;
                 });
             },
         }
@@ -403,8 +418,8 @@ fn prepare_decode(
     }
 }
 
-pub fn prepare_decoder(coder: &Context, is_async: bool) -> TokenStream {
-    let decode = prepare_decode(&coder, &coder.instructions[..], is_async, true);
+pub fn prepare_decoder(options: &CompileOptions, coder: &Context, is_async: bool) -> TokenStream {
+    let decode = prepare_decode(options, &coder, &coder.instructions[..], is_async, true);
     quote! {
         #decode
     }

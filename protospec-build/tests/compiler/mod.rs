@@ -70,12 +70,8 @@ pub fn compile(name: &str, input: &str) {
 
 fn compile_test_program(program: &Program, test: TokenStream) -> String {
     let options = CompileOptions {
-        derives: vec![
-            "PartialEq".to_string(),
-            "Debug".to_string(),
-            "Clone".to_string(),
-        ],
         include_async: false,
+        ..Default::default()
     };
     let compiled = compiler::compile_program(&program, &options);
     let compiled_test = quote! {
@@ -943,4 +939,35 @@ fn test_compiler_tagged_nested_enum_struct() {
     };
 
     compile("tagged_nested_enum_struct", &compile_test_program(&asg, test));
+}
+
+#[test]
+fn test_compiler_auto_distant() {
+    let asg = load_asg(
+        r#"
+        type Payload = container {
+            child_count: u16 +auto,
+            reserved: u8[1],
+            children_windows: u32[child_count],
+        };
+    "#,
+    )
+    .unwrap();
+
+    let test = quote! {
+        fn roundtrip(mut item: Payload) {
+            let mut out = vec![];
+            item.encode_sync(&mut out).expect("failed to encode");
+            let decoded = Payload::decode_sync(&mut &out[..]).expect("failed to decode");
+            item.child_count = item.children_windows.len() as u16;
+            assert_eq!(&item, &decoded);
+        }
+        roundtrip(Payload {
+            child_count: 0,
+            reserved: vec![0u8],
+            children_windows: vec![5u32],
+        });
+    };
+
+    compile("auto_distant", &compile_test_program(&asg, test));
 }

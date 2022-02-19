@@ -67,7 +67,8 @@ impl Program {
                 match declaration {
                     ast::Declaration::Type(type_) if matches!(type_.value.type_.raw_type, ast::RawType::Enum(_)) => {
                         let field = Scope::convert_type_declaration(type_, &*program)?;
-                        Scope::convert_ast_field(&scope, &type_.value, &field, Some(&type_.arguments[..]))?;
+                        let scope = Scope::convert_ast_field_arguments(&scope, &field, Some(&type_.arguments[..]))?;
+                        Scope::convert_ast_field(&scope, &type_.value, &field)?;
                     }
                     ast::Declaration::Const(const_) => {
                         Scope::convert_const_declaration(const_, &*program, &scope)?;
@@ -86,8 +87,16 @@ impl Program {
                     _ => (),
                 }
             }
-            for (type_, field) in return_fields {
-                Scope::convert_ast_field(&scope, &type_.value, &field, Some(&type_.arguments[..]))?;
+
+            // convert arguments
+            let mut sub_scopes = vec![];
+            for (type_, field) in &return_fields {
+                sub_scopes.push(Scope::convert_ast_field_arguments(&scope, &field, Some(&type_.arguments[..]))?);
+            }
+
+            // convert rest
+            for ((type_, field), sub_scope) in return_fields.into_iter().zip(sub_scopes.iter()) {
+                Scope::convert_ast_field(sub_scope, &type_.value, &field)?;
             }
         }
 

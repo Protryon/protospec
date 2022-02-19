@@ -22,6 +22,17 @@ fn test_container() {
     .unwrap();
 }
 
+
+#[test]
+fn test_container_empty() {
+    parse(
+        r#"
+    type test = container {};
+    "#,
+    )
+    .unwrap();
+}
+
 #[test]
 fn test_container_no_trailing() {
     parse(
@@ -42,6 +53,19 @@ fn test_nested_container() {
         west: container {
             east: u32,
         },
+    };
+    "#,
+    )
+    .unwrap();
+}
+
+#[test]
+fn test_container_pad() {
+    parse(
+        r#"
+    type test = container {
+        x: u32,
+        .pad: 5,
     };
     "#,
     )

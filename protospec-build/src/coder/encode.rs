@@ -30,6 +30,8 @@ pub enum Instruction {
     EncodeEnum(PrimitiveType, Target, usize),
     EncodePrimitive(Target, usize, PrimitiveType),
     EncodePrimitiveArray(Target, usize, PrimitiveType, Option<usize>),
+    // target, register of length
+    Pad(Target, usize),
 
     // register representing iterator from -> term, term, inner
     Loop(usize, usize, Vec<Instruction>),
@@ -127,41 +129,36 @@ impl Context {
     }
 
     fn encode_container_items(&mut self, container: &ContainerType, buf_target: Target, resolver: &Resolver, source: usize) {
-        let mut auto_target = vec![];
+        let mut auto_targets = vec![];
         for (name, child) in container.items.iter() {
             if child.is_auto.get() {
                 let new_target = self.alloc_register();
                 self.instructions.push(Instruction::AllocDynBuf(new_target));
-                auto_target.push((new_target, child));
+                auto_targets.push((new_target, child));
                 continue;
             }
-            let (real_target, auto_field) = auto_target
+            let (real_target, _) = auto_targets
                 .last()
                 .map(|x| (Target::Buf(x.0), Some(&x.1)))
                 .unwrap_or_else(|| (buf_target, None));
-            if matches!(&*child.type_.borrow(), Type::Container(_)) {
-                //TODO: this may not work
+            if matches!(&*child.type_.borrow(), Type::Container(_)) || child.is_pad.get() {
                 self.encode_field(real_target, resolver, source, child);
             } else {
                 let resolved = resolver(self, &**name);
                 self.encode_field(real_target, resolver, resolved, child);
             }
-            if let Some(auto_field) = auto_field {
+
+            for (i, (auto_target, auto_field)) in auto_targets.clone().into_iter().enumerate().rev() {
                 if let Some(resolved) = self.resolved_autos.get(&auto_field.name).copied() {
-                    let auto_field = *auto_field;
-                    let (auto_target, target_auto_field) = auto_target.pop().unwrap();
-                    if auto_field.name != target_auto_field.name {
-                        panic!("+auto tags must be declared and used in a hierarchical manner");
-                    }
-                    self.encode_field(buf_target, resolver, resolved, auto_field);
+                    auto_targets.remove(i);
+                    let target = auto_targets.get(i).map(|(target, _)| Target::Buf(*target)).unwrap_or(buf_target);
+                    self.encode_field(target, resolver, resolved, auto_field);
                     self.instructions
-                        .push(Instruction::EmitBuf(buf_target, auto_target));
-                } else {
-                    panic!("unresolved +auto field: {}", auto_field.name);
+                        .push(Instruction::EmitBuf(target, auto_target));
                 }
             }
         }
-        for (_, auto_field) in auto_target {
+        for (_, auto_field) in auto_targets {
             panic!("unused auto field: {}", auto_field.name);
         }
     }
@@ -232,6 +229,17 @@ impl Context {
         };
 
         match &*field.type_.borrow() {
+            _ if field.is_pad.get() => {
+                let array_type = field.type_.borrow();
+                let array_type = match &*array_type {
+                    Type::Array(a) => &**a,
+                    _ => panic!("invalid type for pad"),
+                };
+                let len = array_type.length.value.as_ref().cloned().unwrap();
+                let length_register = self.alloc_register();
+                self.instructions.push(Instruction::Eval(length_register, len));
+                self.instructions.push(Instruction::Pad(target, length_register));
+            },
             Type::Container(c) => {
                 let buf_target = if let Some(length) = &c.length {
                     //todo: use limited stream
@@ -258,13 +266,14 @@ impl Context {
 
                                 let mut unwrapped = vec![];
                                 for (subname, subchild) in c.flatten_view() {
-                                    if !matches!(&*subchild.type_.borrow(), Type::Container(_)) {
-                                        let alloced = self.alloc_register();
-                                        unwrapped.push((
-                                            subname.clone(),
-                                            alloced,
-                                        ));
+                                    if subchild.is_auto.get() || subchild.is_pad.get() || matches!(&*subchild.type_.borrow(), Type::Container(_)) {
+                                        continue;
                                     }
+                                    let alloced = self.alloc_register();
+                                    unwrapped.push((
+                                        subname.clone(),
+                                        alloced,
+                                    ));
                                 }
 
                                 self.instructions.push(Instruction::UnwrapEnumStruct(
@@ -278,7 +287,7 @@ impl Context {
                                 let map = unwrapped.into_iter().collect::<HashMap<_, _>>();
 
                                 let resolver: Resolver = Box::new(move |_context, name| *map.get(name).expect("illegal field ref"));
-                                self.encode_container_items(c, buf_target, &resolver, source, );
+                                self.encode_container_items(c, buf_target, &resolver, source);
                                 self.instructions.push(Instruction::Break);
                             },
                             _ => {
@@ -311,28 +320,7 @@ impl Context {
                 }
 
                 if let Some(length) = &c.length {
-                    match length {
-                        Expression::FieldRef(f) if f.is_auto.get() => {
-                            let type_ = f.type_.borrow();
-                            let cast_type = match type_.resolved().as_ref() {
-                                Type::Scalar(s) => *s,
-                                Type::Foreign(f) => match f.obj.can_receive_auto() {
-                                    Some(s) => s,
-                                    None => unimplemented!("bad ffi type for auto field"),
-                                },
-                                _ => unimplemented!("bad type for auto field"),
-                            };
-
-                            let target = self.alloc_register();
-                            self.instructions.push(Instruction::GetLen(
-                                target,
-                                buf_target.unwrap_buf(),
-                                Some(cast_type),
-                            ));
-                            self.resolved_autos.insert(f.name.clone(), target);
-                        }
-                        _ => (),
-                    }
+                    self.check_auto(length, buf_target.unwrap_buf());
                     self.instructions
                         .push(Instruction::EmitBuf(target, buf_target.unwrap_buf()));
                 }
@@ -345,6 +333,48 @@ impl Context {
             if let Some(owned_stream) = owned_stream {
                 self.instructions.push(Instruction::Drop(*owned_stream));
             }
+        }
+    }
+
+    fn resolve_auto(&mut self, field: &Arc<Field>, source: usize) -> Option<usize> {
+        let type_ = field.type_.borrow();
+        let cast_type = match type_.resolved().as_ref() {
+            Type::Scalar(s) => *s,
+            Type::Foreign(f) => match f.obj.can_receive_auto() {
+                Some(s) => s,
+                None => unimplemented!("bad ffi type for auto field"),
+            },
+            _ => unimplemented!("bad type for auto field"),
+        };
+
+        let target = self.alloc_register();
+        self.instructions.push(Instruction::GetLen(
+            target,
+            source,
+            Some(cast_type),
+        ));
+        self.resolved_autos.insert(field.name.clone(), target);
+        Some(target)
+    }
+
+    fn check_auto(&mut self, base: &Expression, source: usize) -> Option<usize> {
+        match base {
+            Expression::FieldRef(f) if f.is_auto.get() => {
+                self.resolve_auto(f, source)
+            },
+            Expression::FieldRef(_) => None,
+            Expression::Binary(_) => None,
+            Expression::Unary(_) => None,
+            Expression::Cast(expr) => self.check_auto(&*expr.inner, source),
+            Expression::ArrayIndex(_) => None,
+            Expression::EnumAccess(_) => None,
+            Expression::Int(_) => None,
+            Expression::ConstRef(_) => None,
+            Expression::InputRef(_) => None,
+            Expression::Str(_) => None,
+            Expression::Ternary(_) => None,
+            Expression::Bool(_) => None,
+            Expression::Call(_) => None,
         }
     }
 
@@ -362,24 +392,10 @@ impl Context {
                 };
 
                 let mut len = if terminator.is_none() {
-                    match &c.length.value {
-                        Some(Expression::FieldRef(f)) if f.is_auto.get() => {
-                            let type_ = f.type_.borrow();
-                            let cast_type = match &*type_ {
-                                Type::Scalar(s) => s,
-                                _ => unimplemented!("bad type for auto field"),
-                            };
-
-                            let target = self.alloc_register();
-                            self.instructions.push(Instruction::GetLen(
-                                target,
-                                source,
-                                Some(*cast_type),
-                            ));
-                            self.resolved_autos.insert(f.name.clone(), target);
-                            Some(target)
-                        }
-                        _ => None,
+                    if let Some(expr) = &c.length.value {
+                        self.check_auto(expr, source)
+                    } else {
+                        None
                     }
                 } else {
                     None
@@ -532,24 +548,7 @@ impl Context {
                     let arguments = f.obj.arguments();
                     for (expr, arg) in r.arguments.iter().zip(arguments.iter()) {
                         if arg.can_resolve_auto {
-                            match expr {
-                                Expression::FieldRef(f) if f.is_auto.get() => {
-                                    let type_ = f.type_.borrow();
-                                    let cast_type = match &*type_ {
-                                        Type::Scalar(s) => s,
-                                        _ => unimplemented!("bad type for auto field"),
-                                    };
-
-                                    let len_target = self.alloc_register();
-                                    self.instructions.push(Instruction::GetLen(
-                                        len_target,
-                                        source,
-                                        Some(*cast_type),
-                                    ));
-                                    self.resolved_autos.insert(f.name.clone(), len_target);
-                                }
-                                _ => (),
-                            }
+                            self.check_auto(expr, source);
                         }
                     }
                     self.instructions.push(Instruction::EncodeForeign(

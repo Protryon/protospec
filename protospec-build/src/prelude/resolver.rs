@@ -26,6 +26,7 @@ impl<T: ImportResolver + 'static> ImportResolver for PreludeImportResolver<T> {
             "v64" => Some(Box::new(VarInt::new(ScalarType::I64))),
             "v128" => Some(Box::new(VarInt::new(ScalarType::I128))),
             "utf8" => Some(Box::new(Utf8)),
+            "utf16" => Some(Box::new(Utf16)),
             x => self.0.resolve_ffi_type(x)?,
         })
     }
@@ -33,6 +34,7 @@ impl<T: ImportResolver + 'static> ImportResolver for PreludeImportResolver<T> {
     fn resolve_ffi_function(&self, name: &str) -> Result<Option<ForeignFunctionObj>> {
         Ok(match name {
             "len" => Some(Box::new(LenFunction)),
+            "pad" => Some(Box::new(PadFunction)),
             x => self.0.resolve_ffi_function(x)?,
         })
     }

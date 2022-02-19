@@ -26,6 +26,7 @@ pub struct Field {
     pub toplevel: bool,
     pub is_auto: Cell<bool>,
     pub is_maybe_cyclical: Cell<bool>,
+    pub is_pad: Cell<bool>,
 }
 
 impl Field {

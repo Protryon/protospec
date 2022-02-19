@@ -17,17 +17,34 @@ pub fn global_name(input: &str) -> String {
 
 #[derive(Clone, Default, Debug)]
 pub struct CompileOptions {
-    pub derives: Vec<String>,
+    pub enum_derives: Vec<String>,
+    pub struct_derives: Vec<String>,
     pub include_async: bool,
+    pub use_anyhow: bool,
+    pub debug_mode: bool,
 }
 
 impl CompileOptions {
-    fn emit_derives(&self, extra: &[&str]) -> TokenStream {
-        let mut all: Vec<_> = self.derives.iter().map(|x| &**x).collect();
+    fn emit_struct_derives(&self, extra: &[&str]) -> TokenStream {
+        let mut all: Vec<_> = self.struct_derives.iter().map(|x| &**x).collect();
         all.extend_from_slice(extra);
         all.sort();
         all.dedup();
 
+        self.emit_derives(&all[..])
+    }
+
+    fn emit_enum_derives(&self, extra: &[&str]) -> TokenStream {
+        let mut all: Vec<_> = self.enum_derives.iter().map(|x| &**x).collect();
+        all.extend_from_slice(extra);
+        all.retain(|x| *x != "Default");
+        all.sort();
+        all.dedup();
+
+        self.emit_derives(&all[..])
+    }
+
+    fn emit_derives(&self, all: &[&str]) -> TokenStream {
         if all.len() > 0 {
             let items = flatten(
                 all.into_iter()
@@ -50,30 +67,57 @@ impl CompileOptions {
 
 pub fn compile_program(program: &Program, options: &CompileOptions) -> TokenStream {
     let mut components = vec![];
+    let errors = if options.use_anyhow {
+        quote! {
+            pub type Result<T> = anyhow::Result<T>;
+    
+            fn encode_error<S: AsRef<str>>(value: S) -> anyhow::Error {
+                anyhow::anyhow!("{}", value.as_ref())
+            }
+
+            fn decode_error<S: AsRef<str>>(value: S) -> anyhow::Error {
+                anyhow::anyhow!("{}", value.as_ref())
+            }
+        }
+    } else {
+        quote! {
+            use std::error::Error;
+            pub type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync + 'static>>;
+    
+            #[derive(Debug)]
+            pub struct DecodeError(pub String);
+            impl std::fmt::Display for DecodeError {
+                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                    write!(f, "{}", self.0)
+                }
+            }
+            impl Error for DecodeError {}
+            #[derive(Debug)]
+            pub struct EncodeError(pub String);
+            impl std::fmt::Display for EncodeError {
+                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                    write!(f, "{}", self.0)
+                }
+            }
+            impl Error for EncodeError {}    
+
+            fn encode_error<S: AsRef<str>>(value: S) -> EncodeError {
+                EncodeError(value.as_ref().to_string())
+            }
+
+            fn decode_error<S: AsRef<str>>(value: S) -> DecodeError {
+                DecodeError(value.as_ref().to_string())
+            }
+        }
+    };
+
     components.push(quote! {
         use std::io::{Read, BufRead, Cursor};
         use std::slice;
         use std::mem;
         use std::convert::TryInto;
-        use std::error::Error;
-        pub type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync + 'static>>;
 
-        #[derive(Debug)]
-        pub struct DecodeError(pub String);
-        impl std::fmt::Display for DecodeError {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                write!(f, "{}", self.0)
-            }
-        }
-        impl Error for DecodeError {}
-        #[derive(Debug)]
-        pub struct EncodeError(pub String);
-        impl std::fmt::Display for EncodeError {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                write!(f, "{}", self.0)
-            }
-        }
-        impl Error for EncodeError {}
+        #errors
     });
     for (name, field) in program.types.iter() {
         match &*field.type_.borrow() {
@@ -94,7 +138,7 @@ pub fn compile_program(program: &Program, options: &CompileOptions) -> TokenStre
                 } else {
                     type_ref
                 };
-                let derives = options.emit_derives(&[]);
+                let derives = options.emit_struct_derives(&[]);
 
                 components.push(quote! {
                     #derives
@@ -106,7 +150,7 @@ pub fn compile_program(program: &Program, options: &CompileOptions) -> TokenStre
     }
     let components = flatten(components);
     quote! {
-        #[allow(unused_imports, unused_parens, unused_variables, dead_code)]
+        #[allow(unused_imports, unused_parens, unused_variables, dead_code, unused_mut)]
         mod _ps {
             #components
         }
@@ -123,7 +167,7 @@ fn prepare_impls(field: &Arc<Field>, options: &CompileOptions) -> TokenStream {
 
     let mut decode_context = coder::decode::Context::new();
     decode_context.decode_field_top(field);
-    let decode_sync = decoder::prepare_decoder(&decode_context, false);
+    let decode_sync = decoder::prepare_decoder(options, &decode_context, false);
 
     let mut new_context = coder::encode::Context::new();
     new_context.encode_field_top(field);
@@ -165,7 +209,7 @@ fn prepare_impls(field: &Arc<Field>, options: &CompileOptions) -> TokenStream {
         };
 
         let encode_async = encoder::prepare_encoder(&new_context, true);
-        let decode_async = decoder::prepare_decoder(&decode_context, true);
+        let decode_async = decoder::prepare_decoder(options, &decode_context, true);
         quote! {
             #async_recursion
             pub async fn encode_async<W: tokio::io::AsyncWrite + Send + Sync + Unpin>(&self, writer: &mut W #arguments) -> Result<()> {
@@ -245,6 +289,9 @@ pub fn emit_type_ref(item: &Type) -> TokenStream {
 fn generate_container_fields(access: TokenStream, item: &ContainerType) -> TokenStream {
     let mut fields = vec![];
     for (name, field) in item.flatten_view() {
+        if field.is_pad.get() {
+            continue;
+        }
         let name_ident = format_ident!("{}", name);
         let type_ref = emit_type_ref(&field.type_.borrow());
         let type_ref = if field.condition.borrow().is_some() {
@@ -267,9 +314,9 @@ pub fn generate_container(
     item: &ContainerType,
     options: &CompileOptions,
 ) -> TokenStream {
-    let derives = options.emit_derives(&[]);
     let name_ident = format_ident!("{}", global_name(name));
     if item.is_enum.get() {
+        let derives = options.emit_enum_derives(&[]);
         let mut fields = vec![];
         for (name, field) in &item.items {
             let name_ident = format_ident!("{}", name);
@@ -295,13 +342,54 @@ pub fn generate_container(
         }
         let fields = flatten(fields);
 
+        let default_impl = if options.enum_derives.iter().any(|x| x == "Default") {
+            let (default_field, field) = item.items.first().expect("missing enum entry for default");
+            let default_field = format_ident!("{}", default_field);
+
+            let type_ = field.type_.borrow();
+            let default_value = match &*type_ {
+                Type::Container(sub_container) => {
+                    let mut fields = vec![];
+                    for (name, _) in sub_container.flatten_view() {
+                        let name_ident = format_ident!("{}", name);
+                
+                        fields.push(quote! {
+                            #name_ident: Default::default(),
+                        });
+                    }
+                    let fields = flatten(fields);
+                    quote! {
+                        {
+                            #fields
+                        }
+                    }
+                },
+                _ => {
+                    quote! { (Default::default()) }
+                }
+            };
+
+            quote! {
+                impl Default for #name_ident {
+                    fn default() -> Self {
+                        Self::#default_field#default_value
+                    }
+                }
+            }
+        } else {
+            quote! {}
+        };
+
         quote! {
             #derives
             pub enum #name_ident {
                 #fields
             }
+
+            #default_impl
         }
     } else {
+        let derives = options.emit_struct_derives(&[]);
         let fields = generate_container_fields(quote! { pub }, item);
     
         quote! {
@@ -333,11 +421,26 @@ pub fn generate_enum(name: &str, item: &EnumType, options: &CompileOptions) -> T
         })
     }
     let fields = flatten(fields);
+
     let from_repr_matches = flatten(from_repr_matches);
     let rep = format_ident!("{}", item.rep.to_string());
-    let derives = options.emit_derives(&["Clone", "Copy"]);
+    let derives = options.emit_enum_derives(&["Clone", "Copy"]);
 
     let format_string = format!("illegal enum value '{{}}' for enum '{}'", name);
+
+    let default_impl = if options.enum_derives.iter().any(|x| x == "Default") {
+        let (default_field, _) = item.items.first().expect("missing enum entry for default");
+        let default_field = format_ident!("{}", default_field);
+        quote! {
+            impl Default for #name_ident {
+                fn default() -> Self {
+                    Self::#default_field
+                }
+            }
+        }
+    } else {
+        quote! {}
+    };
 
     quote! {
         #[repr(#rep)]
@@ -350,9 +453,11 @@ pub fn generate_enum(name: &str, item: &EnumType, options: &CompileOptions) -> T
             pub fn from_repr(repr: #rep) -> Result<Self> {
                 match repr {
                     #from_repr_matches
-                    x => Err(DecodeError(format!(#format_string, x)).into()),
+                    x => Err(decode_error(format!(#format_string, x)).into()),
                 }
             }
         }
+
+        #default_impl
     }
 }

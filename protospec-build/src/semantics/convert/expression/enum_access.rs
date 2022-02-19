@@ -4,7 +4,7 @@ impl Scope {
     pub(super) fn convert_enum_access_expression(
         self_: &Arc<RefCell<Scope>>,
         expr: &ast::EnumAccessExpression,
-        expected_type: PartialType,
+        _expected_type: PartialType,
     ) -> AsgResult<EnumAccessExpression> {
         let field = match self_.borrow().program.borrow().types.get(&expr.name.name) {
             Some(x) => x.clone(),
@@ -33,13 +33,6 @@ impl Scope {
                 ));
             }
         };
-        if !expected_type.assignable_from(&variant.type_) {
-            return Err(AsgError::UnexpectedType(
-                variant.type_.to_string(),
-                expected_type.to_string(),
-                expr.span,
-            ));
-        }
         Ok(EnumAccessExpression {
             enum_field: field,
             variant,

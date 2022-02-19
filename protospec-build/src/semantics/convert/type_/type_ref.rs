@@ -9,7 +9,7 @@ impl Scope {
             let target_args = target.arguments.borrow();
             let min_arg_count = target_args
                 .iter()
-                .filter(|x| x.default_value.is_some())
+                .filter(|x| x.default_value.is_none())
                 .count();
             // optionals MUST be at the end
             if min_arg_count < type_.arguments.len()

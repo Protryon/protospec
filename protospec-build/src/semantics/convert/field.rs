@@ -1,12 +1,11 @@
 use super::*;
 
 impl Scope {
-    pub fn convert_ast_field(
+    pub fn convert_ast_field_arguments(
         self_: &Arc<RefCell<Scope>>,
-        field: &ast::Field,
         into: &Arc<Field>,
         ast_arguments: Option<&[ast::TypeArgument]>,
-    ) -> AsgResult<()> {
+    ) -> AsgResult<Arc<RefCell<Scope>>> {
         let sub_scope = Arc::new(RefCell::new(Scope {
             parent_scope: Some(self_.clone()),
             program: self_.borrow().program.clone(),
@@ -38,6 +37,15 @@ impl Scope {
             }
         }
 
+        into.arguments.replace(arguments);
+        Ok(sub_scope)
+    }
+
+    pub fn convert_ast_field(
+        sub_scope: &Arc<RefCell<Scope>>,
+        field: &ast::Field,
+        into: &Arc<Field>,
+    ) -> AsgResult<()> {
         let condition = if let Some(condition) = &field.condition {
             Some(Scope::convert_expr(
                 &sub_scope,
@@ -59,14 +67,14 @@ impl Scope {
         } in field.transforms.iter()
         {
             let def_transform = if let Some(def_transform) =
-                self_.borrow().program.borrow().transforms.get(&name.name)
+                sub_scope.borrow().program.borrow().transforms.get(&name.name)
             {
                 def_transform.clone()
             } else {
                 return Err(AsgError::UnresolvedTransform(name.name.clone(), name.span));
             };
             let arguments = Self::convert_ffi_arguments(
-                self_,
+                sub_scope,
                 &*def_transform.name,
                 *span,
                 &arguments[..],
@@ -77,7 +85,7 @@ impl Scope {
                 transform: def_transform,
                 condition: if let Some(conditional) = conditional {
                     Some(Scope::convert_expr(
-                        self_,
+                        sub_scope,
                         &**conditional,
                         PartialType::Type(Type::Bool),
                     )?)
@@ -105,7 +113,6 @@ impl Scope {
         into.type_.replace(asg_type);
         into.condition.replace(condition);
         into.transforms.replace(transforms);
-        into.arguments.replace(arguments);
         into.is_auto.replace(is_auto);
 
         Ok(())

@@ -170,7 +170,7 @@ fn eat_identifier(input: &[u8]) -> Option<(&[u8], &[u8])> {
     }
     let mut i = 1usize;
     while i < input.len() {
-        if !input[i].is_ascii_alphanumeric() && input[i] != b'_' && input[i] != b'-' {
+        if !input[i].is_ascii_alphanumeric() && input[i] != b'_' {
             break;
         }
         i += 1;
@@ -507,7 +507,7 @@ impl fmt::Debug for SpannedToken {
     }
 }
 
-pub fn tokenize(input: &str) -> Result<Vec<SpannedToken>> {
+pub fn tokenize(input: &str, strip_comments: bool) -> Result<Vec<SpannedToken>> {
     let mut input = input.as_bytes();
     let mut tokens = vec![];
     let mut index = 064;
@@ -516,10 +516,20 @@ pub fn tokenize(input: &str) -> Result<Vec<SpannedToken>> {
     while input.len() > 0 {
         match Token::gobble(input) {
             (output, Some(token)) => {
+                let start_line = line_no;
+                match &token {
+                    Token::CommentLine(_) => {
+                        line_no += 1;
+                    },
+                    Token::CommentBlock(s) => {
+                        line_no += s.chars().filter(|x| *x == '\n').count() as u64;
+                    }
+                    _ => (),
+                }
                 tokens.push(SpannedToken {
                     token,
                     span: Span {
-                        line_start: line_no,
+                        line_start: start_line,
                         line_stop: line_no,
                         col_start: index - line_start + 1,
                         col_stop: index - line_start + (input.len() - output.len()) as u64 + 1,
@@ -547,7 +557,11 @@ pub fn tokenize(input: &str) -> Result<Vec<SpannedToken>> {
             }
         }
     }
-    Ok(tokens)
+    if strip_comments {
+        Ok(tokens.into_iter().filter(|x| !matches!(x.token, Token::CommentLine(_) | Token::CommentBlock(_))).collect())
+    } else {
+        Ok(tokens)
+    }
 }
 
 #[cfg(test)]
@@ -558,6 +572,7 @@ mod tests {
     fn test_string() {
         let tokens = tokenize(
             r#""test" "test\"test""#,
+            false,
         )
         .unwrap();
         let mut output = String::new();
@@ -602,6 +617,7 @@ mod tests {
         ,;:?[]{}<>?+-/ *%..<=>= = == != ! () // test$
         :> || && | ^ | >> << >>>~ . ?:
         //"#,
+        false,
         )
         .unwrap();
         let mut output = String::new();
