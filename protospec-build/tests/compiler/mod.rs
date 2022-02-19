@@ -199,6 +199,49 @@ fn test_compiler_bitfield() {
 }
 
 #[test]
+fn test_compiler_bitfield_member() {
+    let asg = load_asg(
+        r#"
+    type flags = bitfield u32 {
+        A = 0x1,
+        B,
+        C,
+    };
+    type test = container {
+        bitmask: flags,
+        a_value: u8 { bitmask.A },
+        b_value: u16 { bitmask.B },
+        c_value: u32 { bitmask.C },
+    };
+    "#,
+    )
+    .unwrap();
+
+    let test = quote! {
+        fn roundtrip(item: test) {
+            let mut out = vec![];
+            item.encode_sync(&mut out).expect("failed to encode");
+            let decoded = test::decode_sync(&mut &out[..]).expect("failed to decode");
+            assert_eq!(item, decoded);
+        }
+        roundtrip(test {
+            bitmask: flags::A,
+            a_value: Some(5u8),
+            b_value: None,
+            c_value: None,
+        });
+        roundtrip(test {
+            bitmask: flags::A | flags::C,
+            a_value: Some(5u8),
+            b_value: None,
+            c_value: Some(10),
+        });
+    };
+
+    compile("bitfield_member", &compile_test_program(&asg, test));
+}
+
+#[test]
 fn test_compiler_primitive() {
     let asg = load_asg(
         r#"

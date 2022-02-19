@@ -33,6 +33,9 @@ pub use int::*;
 mod boolean;
 pub use boolean::*;
 
+mod member;
+pub use member::*;
+
 #[derive(Clone, Serialize, Deserialize)]
 pub enum Expression {
     Binary(BinaryExpression),
@@ -46,6 +49,7 @@ pub enum Expression {
     Ternary(TernaryExpression),
     Bool(Bool),
     Call(CallExpression),
+    Member(MemberExpression),
 }
 
 impl Node for Expression {
@@ -62,6 +66,7 @@ impl Node for Expression {
             Expression::Ternary(x) => x.span(),
             Expression::Bool(x) => x.span(),
             Expression::Call(x) => x.span(),
+            Expression::Member(x) => x.span(),
         }
     }
 }

@@ -196,6 +196,17 @@ pub fn eval_const_expression(expr: &Expression) -> Option<ConstValue> {
                 }
             })
         }
+        Member(c) => {
+            let target = eval_const_expression(&c.target)?;
+            let member = eval_const_expression(&c.member.value)?;
+            match (target, member) {
+                (ConstValue::Int(target), ConstValue::Int(member)) => {
+                    // todo: find better way to get same-typed zero
+                    Some(ConstValue::Bool((target & member)? != (member - member)?))
+                },
+                _ => unimplemented!("can not use member exprs on nonint targets")
+            }
+        }
         Unary(c) => {
             let inner = eval_const_expression(&c.inner)?;
             Some(match c.op {
@@ -278,6 +289,13 @@ pub fn emit_expression<F: Fn(&Arc<Field>) -> TokenStream>(
                 quote! {
                     ((#left) #op (#right))
                 }
+            }
+        }
+        Member(c) => {
+            let target = emit_expression(&c.target, ref_resolver);
+            let get_member = format_ident!("{}", c.member.name.to_snake());
+            quote! {
+                #target.#get_member()
             }
         }
         Unary(c) => {

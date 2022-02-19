@@ -22,6 +22,8 @@ mod ternary;
 
 mod call;
 
+mod member;
+
 impl Scope {
 
     pub fn convert_expr(
@@ -64,6 +66,9 @@ impl Scope {
             }
             Call(expr) => {
                 Expression::Call(Self::convert_call_expression(self_, expr, expected_type)?)
+            }
+            Member(expr) => {
+                Expression::Member(Self::convert_member_expression(self_, expr, expected_type)?)
             }
         };
         

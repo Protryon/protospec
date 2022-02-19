@@ -27,6 +27,9 @@ pub use const_int::*;
 mod int;
 pub use int::*;
 
+mod member;
+pub use member::*;
+
 pub trait AsgExpression {
     fn get_type(&self) -> Option<Type>;
 }
@@ -46,6 +49,7 @@ pub enum Expression {
     Ternary(TernaryExpression),
     Bool(bool),
     Call(CallExpression),
+    Member(MemberExpression),
 }
 
 impl AsgExpression for Expression {
@@ -86,6 +90,7 @@ impl AsgExpression for Expression {
             Ternary(e) => e.get_type(),
             Bool(_) => Some(Type::Bool),
             Call(ffi) => ffi.get_type(),
+            Member(e) => e.get_type(),
         }
     }
 }

@@ -366,6 +366,7 @@ impl Context {
             },
             Expression::FieldRef(_) => None,
             Expression::Binary(_) => None,
+            Expression::Member(_) => None,
             Expression::Unary(_) => None,
             Expression::Cast(expr) => self.check_auto(&*expr.inner, source),
             Expression::ArrayIndex(_) => None,

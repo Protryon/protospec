@@ -6,6 +6,7 @@ use proc_macro2::TokenStream;
 use quote::TokenStreamExt;
 use quote::{format_ident, quote};
 use std::{sync::Arc, unimplemented};
+use case::CaseExt;
 
 mod decoder;
 mod encoder;
@@ -496,11 +497,14 @@ pub fn generate_enum(name: &str, item: &EnumType, options: &CompileOptions) -> T
 pub fn generate_bitfield(name: &str, item: &BitfieldType, options: &CompileOptions) -> TokenStream {
     let name_ident = format_ident!("{}", global_name(name));
     let mut fields = vec![];
+    let mut funcs = vec![];
     let mut all_fields = ConstInt::parse(item.rep, "0", crate::Span::default()).unwrap();
     let zero = all_fields;
 
     for (name, cons) in item.items.iter() {
-        let value_ident = format_ident!("{}", name);
+        let name_ident = format_ident!("{}", name);
+        let get_name = format_ident!("{}", name.to_snake());
+        let set_name = format_ident!("set_{}", name.to_snake());
         let value = eval_const_expression(&cons.value);
         if value.is_none() {
             unimplemented!("could not resolve constant expression");
@@ -517,10 +521,20 @@ pub fn generate_bitfield(name: &str, item: &BitfieldType, options: &CompileOptio
 
         let value = value.emit();
         fields.push(quote! {
-            pub const #value_ident: Self = Self(#value);
+            pub const #name_ident: Self = Self(#value);
+        });
+        funcs.push(quote! {
+            pub fn #get_name(&self) -> bool {
+                (*self & Self::#name_ident) != Self::ZERO
+            }
+
+            pub fn #set_name(&mut self) {
+                *self = *self | Self::#name_ident;
+            }
         });
     }
     let fields = flatten(fields);
+    let funcs = flatten(funcs);
 
     let rep = format_ident!("{}", item.rep.to_string());
     let rep_size = item.rep.size() as usize;
@@ -537,6 +551,7 @@ pub fn generate_bitfield(name: &str, item: &BitfieldType, options: &CompileOptio
         impl #name_ident {
             #fields
             pub const ALL: Self = Self(#all_fields);
+            pub const ZERO: Self = Self(0);
 
             pub fn from_repr(repr: #rep) -> Result<Self> {
                 if (repr & !Self::ALL.0) != 0 {
@@ -549,6 +564,8 @@ pub fn generate_bitfield(name: &str, item: &BitfieldType, options: &CompileOptio
             pub fn to_be_bytes(&self) -> [u8; #rep_size] {
                 self.0.to_be_bytes()
             }
+
+            #funcs
         }
 
         impl core::ops::BitOr for #name_ident {

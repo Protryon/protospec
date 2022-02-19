@@ -75,6 +75,8 @@ pub enum AsgError {
     EnumContainerPad(Span),
     #[error("type `{0}` does not implement auto receiving @ {1}")]
     TypeNotAutoCompatible(String, Span),
+    #[error("referenced bitfield member `{0}` does not exist @ {1}")]
+    BitfieldMemberUndefined(String, Span),
     #[error("unknown: {0}")]
     Unknown(#[from] crate::Error),
 }

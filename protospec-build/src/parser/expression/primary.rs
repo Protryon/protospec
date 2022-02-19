@@ -22,18 +22,16 @@ pub fn parse_primary_expression(t: &mut TokenIter) -> ParseResult<Expression> {
                     name: ident,
                     variant,
                 })
+            } else if t.peek_token(Token::LeftParen)? {
+                let mut span = span;
+                let arguments = parse_arguments(t, &mut span)?;
+                Expression::Call(CallExpression {
+                    function: ident,
+                    arguments,
+                    span,
+                })
             } else {
-                if t.peek_token(Token::LeftParen)? {
-                    let mut span = span;
-                    let arguments = parse_arguments(t, &mut span)?;
-                    Expression::Call(CallExpression {
-                        function: ident,
-                        arguments,
-                        span,
-                    })
-                } else {
-                    Expression::Ref(ident)
-                }
+                Expression::Ref(ident)
             }
         }
         Token::LeftParen => {

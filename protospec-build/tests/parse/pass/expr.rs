@@ -71,6 +71,17 @@ fn test_array_index() {
 }
 
 #[test]
+fn test_member() {
+    parse(
+        r#"
+    const _: u32 = test[5].west;
+    const _: u32 = test.west;
+    "#,
+    )
+    .unwrap();
+}
+
+#[test]
 fn test_array_index_expr() {
     parse(
         r#"
