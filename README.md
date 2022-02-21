@@ -188,7 +188,7 @@ Example implementation:
   * generalized inferrable fields
     * bitfields
     * booleans
-* option to encode optional fields as zeros
+* flag to encode optional fields as zeros
 * DCG of top-level field dependencies & field reordering
 * clean up encoding/decoding
 * a ton of docs
