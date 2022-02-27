@@ -91,13 +91,12 @@ pub fn rustfmt(input: &str) -> String {
     String::from_utf8_lossy(&proc.wait_with_output().unwrap().stdout).to_string()
 }
 
-pub fn compile_spec<T: ImportResolver + 'static>(
+pub fn compile_spec<T: ImportResolver + Clone + 'static>(
     name: &str,
     spec: &str,
     options: &Options<T>,
-    resolver: T,
 ) -> AsgResult<()> {
-    let resolver = PreludeImportResolver(resolver);
+    let resolver = PreludeImportResolver(options.resolver.clone());
     let program =
         asg::Program::from_ast(&parse(spec).map_err(|x| -> Error { x.into() })?, &resolver)?;
     let compiler_options = CompileOptions {
