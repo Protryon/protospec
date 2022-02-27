@@ -4,6 +4,7 @@ impl Scope {
     pub(super) fn convert_bitfield_type(
         self_: &Arc<RefCell<Scope>>,
         type_: &ast::Bitfield,
+        purpose: TypePurpose,
     ) -> AsgResult<Type> {
         let mut items: IndexMap<String, Arc<Const>> = IndexMap::new();
         let mut last_defined_item = None::<Arc<Const>>;
@@ -53,7 +54,12 @@ impl Scope {
             }
             items.insert(name.name.clone(), cons);
         }
+        let name = match purpose {
+            TypePurpose::TypeDefinition(name) => name,
+            _ => unreachable!("cannot have a non-toplevel bitfield"),
+        };
         Ok(Type::Bitfield(BitfieldType {
+            name,
             rep: type_.rep,
             items,
         }))

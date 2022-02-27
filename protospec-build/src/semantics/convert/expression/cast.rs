@@ -9,7 +9,7 @@ impl Scope {
         if !expr.type_.raw_type.is_inlinable() {
             return Err(AsgError::CastTypeDefinition(expr.span));
         }
-        let target = Scope::convert_ast_type(self_, &expr.type_.raw_type, false)?;
+        let target = Scope::convert_ast_type(self_, &expr.type_.raw_type, TypePurpose::Expression)?;
 
         let inner = Box::new(Scope::convert_expr(self_, &expr.inner, PartialType::Any)?);
         if let Some(inner_type) = inner.get_type() {

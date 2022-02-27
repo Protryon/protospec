@@ -558,26 +558,33 @@ impl Context {
                 ));
             }
             Type::Ref(r) => {
-                let mut args = vec![];
-                for arg in r.arguments.iter() {
-                    let r = self.alloc_register();
-                    self.instructions.push(Instruction::Eval(r, arg.clone()));
-                    args.push(r);
-                }
                 if let Type::Foreign(f) = &*r.target.type_.borrow() {
+                    let mut function_args = vec![];
                     let arguments = f.obj.arguments();
                     for (expr, arg) in r.arguments.iter().zip(arguments.iter()) {
                         if arg.can_resolve_auto {
-                            self.check_auto(expr, source);
+                            if let Some(auto) = self.check_auto(expr, source) {
+                                function_args.push(auto);
+                                continue;
+                            }
                         }
+                        let r = self.alloc_register();
+                        self.instructions.push(Instruction::Eval(r, expr.clone()));
+                        function_args.push(r);
                     }
                     self.instructions.push(Instruction::EncodeForeign(
                         target,
                         source,
                         f.clone(),
-                        args,
+                        function_args,
                     ));
                 } else {
+                    let mut args = vec![];
+                    for arg in r.arguments.iter() {
+                        let r = self.alloc_register();
+                        self.instructions.push(Instruction::Eval(r, arg.clone()));
+                        args.push(r);
+                    }    
                     self.instructions
                         .push(Instruction::EncodeRef(target, source, args));
                 }

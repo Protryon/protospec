@@ -6,13 +6,7 @@ impl Scope {
         type_: &ast::Array,
     ) -> AsgResult<Type> {
         let length = Scope::convert_length(self_, &type_.length)?;
-        let element = Scope::convert_ast_type(self_, &type_.element.type_.raw_type, false)?;
-        match &element {
-            Type::Container(_) | Type::Enum(_) | Type::Bitfield(_) => {
-                return Err(AsgError::InlineRepetition(type_.span));
-            }
-            _ => (),
-        }
+        let element = Scope::convert_ast_type(self_, &type_.element.type_.raw_type, TypePurpose::ArrayInterior)?;
         let field = Arc::new(Field {
             name: "$array_field".to_string(),
             type_: RefCell::new(element),

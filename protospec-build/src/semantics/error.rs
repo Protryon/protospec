@@ -63,12 +63,12 @@ pub enum AsgError {
     InvalidTypeArgumentCount(usize, usize, usize, Span),
     #[error("cannot have required arguments after optional arguments for type @ {0}")]
     InvalidTypeArgumentOrder(Span),
-    #[error("illegal repitition of container, enum, or bitfield -- outline the container/enum as a top level type declaration @ {0}")]
-    InlineRepetition(Span),
     #[error("invalid or unknown flag '{0}' @ {1}")]
     InvalidFlag(String, Span),
-    #[error("enum containers must be top level @ {0}")]
-    EnumContainerMustBeToplevel(Span),
+    #[error("illegal repitition of type -- outline the interior as a top level type declaration @ {0}")]
+    InlineRepetition(Span),
+    #[error("enums, bitfields, and enum containers must be top level @ {0}")]
+    MustBeToplevel(Span),
     #[error("cannot have field after unconditional field in enum container @ {0}")]
     EnumContainerFieldAfterUnconditional(Span),
     #[error("cannot have pad in enum container @ {0}")]

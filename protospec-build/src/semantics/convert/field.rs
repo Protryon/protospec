@@ -16,7 +16,7 @@ impl Scope {
         let mut arguments = vec![];
         if let Some(ast_arguments) = ast_arguments {
             for argument in ast_arguments {
-                let target_type = Scope::convert_ast_type(&sub_scope, &argument.type_.raw_type, false)?;
+                let target_type = Scope::convert_ast_type(&sub_scope, &argument.type_.raw_type, TypePurpose::Expression)?;
                 sub_scope.borrow_mut().declared_inputs.insert(
                     argument.name.name.clone(),
                     Arc::new(Input {
@@ -56,7 +56,13 @@ impl Scope {
             None
         };
 
-        let asg_type = Scope::convert_ast_type(&sub_scope, &field.type_.raw_type, into.toplevel)?;
+        let purpose = if into.toplevel {
+            TypePurpose::TypeDefinition(into.name.clone())
+        } else {
+            TypePurpose::FieldInterior
+        };
+
+        let asg_type = Scope::convert_ast_type(&sub_scope, &field.type_.raw_type, purpose)?;
 
         let mut transforms = vec![];
         for ast::Transform {
