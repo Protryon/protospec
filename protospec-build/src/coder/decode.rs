@@ -360,7 +360,7 @@ impl Context {
                             self.instructions.push(Instruction::DecodeReprArray(
                                 source,
                                 output,
-                                field.name.clone(),
+                                x.name.clone(),
                                 PrimitiveType::Scalar(x.rep.clone()),
                                 len,
                             ));
@@ -370,7 +370,7 @@ impl Context {
                             self.instructions.push(Instruction::DecodeReprArray(
                                 source,
                                 output,
-                                field.name.clone(),
+                                x.name.clone(),
                                 PrimitiveType::Scalar(x.rep.clone()),
                                 len,
                             ));
@@ -429,7 +429,7 @@ impl Context {
             }
             Type::Enum(e) => {
                 self.instructions.push(Instruction::DecodeRepr(
-                    field.name.clone(),
+                    e.name.clone(),
                     PrimitiveType::Scalar(e.rep.clone()),
                     output,
                     source,
@@ -438,7 +438,7 @@ impl Context {
             }
             Type::Bitfield(e) => {
                 self.instructions.push(Instruction::DecodeRepr(
-                    field.name.clone(),
+                    e.name.clone(),
                     PrimitiveType::Scalar(e.rep.clone()),
                     output,
                     source,
