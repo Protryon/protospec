@@ -47,18 +47,10 @@ impl fmt::Display for Type {
                 write!(f, "\n}}\n")
             }
             Type::Enum(c) => {
-                write!(f, "enum {} {{\n", c.rep)?;
-                for (name, cons) in c.items.iter() {
-                    write!(f, "  {} = {}", name, cons.value)?;
-                }
-                write!(f, "\n}}\n")
+                write!(f, "{}", c.name)
             }
             Type::Bitfield(c) => {
-                write!(f, "bitfield {} {{\n", c.rep)?;
-                for (name, cons) in c.items.iter() {
-                    write!(f, "  {} = {}", name, cons.value)?;
-                }
-                write!(f, "\n}}\n")
+                write!(f, "{}", c.name)
             }
             Type::Scalar(c) => c.fmt(f),
             Type::Array(c) => {

@@ -293,7 +293,7 @@ fn flatten<T: IntoIterator<Item = TokenStream>>(iter: T) -> TokenStream {
 pub fn emit_type_ref(item: &Type) -> TokenStream {
     match item {
         Type::Container(_) => unimplemented!(),
-        Type::Enum(_) => unimplemented!(),
+        Type::Enum(enum_type) => emit_ident(&*enum_type.name),
         Type::Bitfield(_) => unimplemented!(),
         Type::Scalar(s) => emit_ident(&s.to_string()),
         Type::Array(array_type) => {

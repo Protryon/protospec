@@ -10,18 +10,36 @@ mod array;
 
 mod type_ref;
 
+#[derive(Clone, Debug)]
+pub enum TypePurpose {
+    TypeDefinition(String),
+    ConstDefinition,
+    ArrayInterior,
+    FieldInterior,
+    Expression,
+}
+
 impl Scope {
 
-    pub fn convert_ast_type(self_: &Arc<RefCell<Scope>>, typ: &ast::RawType, toplevel: bool) -> AsgResult<Type> {
+    pub fn convert_ast_type(self_: &Arc<RefCell<Scope>>, typ: &ast::RawType, purpose: TypePurpose) -> AsgResult<Type> {
         Ok(match typ {
             ast::RawType::Container(type_) => {
-                Self::convert_container_type(self_, type_, toplevel)?
+                if matches!(purpose, TypePurpose::ArrayInterior) {
+                    return Err(AsgError::InlineRepetition(type_.span));
+                }
+                Self::convert_container_type(self_, type_, purpose)?
             }
             ast::RawType::Enum(type_) => {
-                Self::convert_enum_type(self_, type_)?
+                if !matches!(purpose, TypePurpose::TypeDefinition(_)) {
+                    return Err(AsgError::MustBeToplevel(type_.span));
+                }
+                Self::convert_enum_type(self_, type_, purpose)?
             }
             ast::RawType::Bitfield(type_) => {
-                Self::convert_bitfield_type(self_, type_)?
+                if !matches!(purpose, TypePurpose::TypeDefinition(_)) {
+                    return Err(AsgError::MustBeToplevel(type_.span));
+                }
+                Self::convert_bitfield_type(self_, type_, purpose)?
             }
             ast::RawType::Scalar(type_) => {
                 Type::Scalar(type_.clone())

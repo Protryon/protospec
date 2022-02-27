@@ -6,7 +6,7 @@ impl Scope {
     pub(super) fn convert_container_type(
         self_: &Arc<RefCell<Scope>>,
         type_: &ast::Container,
-        toplevel: bool,
+        purpose: TypePurpose,
     ) -> AsgResult<Type> {
         let length = type_
             .length
@@ -24,8 +24,8 @@ impl Scope {
             }
         }
 
-        if !toplevel && is_enum {
-            return Err(AsgError::EnumContainerMustBeToplevel(type_.span));
+        if is_enum && !matches!(purpose, TypePurpose::TypeDefinition(_)) {
+            return Err(AsgError::MustBeToplevel(type_.span));
         }
         
         let mut items: IndexMap<String, Arc<Field>> = IndexMap::new();

@@ -4,6 +4,7 @@ impl Scope {
     pub(super) fn convert_enum_type(
         self_: &Arc<RefCell<Scope>>,
         type_: &ast::Enum,
+        purpose: TypePurpose,
     ) -> AsgResult<Type> {
         let mut items: IndexMap<String, Arc<Const>> = IndexMap::new();
         let mut last_defined_item = None::<Arc<Const>>;
@@ -53,7 +54,12 @@ impl Scope {
             }
             items.insert(name.name.clone(), cons);
         }
+        let name = match purpose {
+            TypePurpose::TypeDefinition(name) => name,
+            _ => unreachable!("cannot have a non-toplevel enum"),
+        };
         Ok(Type::Enum(EnumType {
+            name,
             rep: type_.rep,
             items,
         }))
