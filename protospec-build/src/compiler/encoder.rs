@@ -77,13 +77,6 @@ fn prepare_encode(instructions: &[Instruction], is_async: bool, is_root: bool) -
                     let mut #buf: Vec<u8> = Vec::new();
                 });
             }
-            Instruction::ProxyStream(stream, new_stream) => {
-                let new_stream_value = emit_register(*new_stream);
-                let input = emit_target(stream);
-                statements.push(quote! {
-                    let mut #new_stream_value = #input;
-                });
-            }
             Instruction::Loop(index, stop_index, inner) => {
                 let index = emit_register(*index);
                 let inner = prepare_encode(&inner[..], is_async, false);
