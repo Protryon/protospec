@@ -1,8 +1,23 @@
-use crate::FfiDeclaration;
+use crate::{FfiDeclaration, ForeignFunctionObj};
 
 use super::*;
 
 impl Scope {
+
+    pub(super) fn add_prelude_ffi<T: ImportResolver + 'static>(
+        resolver: &T,
+        program: &RefCell<Program>,
+    ) -> AsgResult<()> {
+        for (name, function) in resolver.prelude_ffi_functions()? {
+            Self::import_function(
+                &mut program.borrow_mut(),
+                &*name,
+                function
+            );
+        }
+        Ok(())
+    }
+
     pub(super) fn convert_ffi_declaration<T: ImportResolver + 'static>(
         ffi: &FfiDeclaration,
         resolver: &T,
@@ -30,11 +45,11 @@ impl Scope {
                                 obj,
                             },
                         ))),
+                        calculated: RefCell::new(None),
                         condition: RefCell::new(None),
                         transforms: RefCell::new(vec![]),
                         span: ffi.span,
                         toplevel: true,
-                        is_auto: Cell::new(false),
                         is_maybe_cyclical: Cell::new(false),
                         is_pad: Cell::new(false),
                     });
@@ -88,14 +103,10 @@ impl Scope {
                             defined.span,
                         ));
                     }
-                    program.borrow_mut().functions.insert(
-                        ffi.name.name.clone(),
-                        Arc::new(Function {
-                            name: ffi.name.name.clone(),
-                            span: ffi.span.clone(),
-                            arguments: obj.arguments(),
-                            inner: obj,
-                        }),
+                    Self::import_function(
+                        &mut program.borrow_mut(),
+                        &ffi.name.name,
+                        obj
                     );
                 } else {
                     return Err(AsgError::FfiMissing(
@@ -106,5 +117,21 @@ impl Scope {
             }
         }
         Ok(())
+    }
+
+    fn import_function(
+        program: &mut Program,
+        name: &str,
+        function: ForeignFunctionObj,
+    ) {
+        program.functions.insert(
+            name.to_string(),
+            Arc::new(Function {
+                name: name.to_string(),
+                span: Span::default(),
+                arguments: function.arguments(),
+                inner: function,
+            }),
+        );
     }
 }

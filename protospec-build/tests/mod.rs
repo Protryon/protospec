@@ -1,6 +1,8 @@
 mod compiler;
 mod parse;
 mod semantic;
+use std::collections::HashMap;
+
 use indexmap::IndexMap;
 use proc_macro2::TokenStream;
 use protospec_build::{*, ffi::ForeignType};
@@ -143,8 +145,8 @@ impl ForeignType for TestType {
         vec![]
     }
 
-    fn can_receive_auto(&self) -> Option<ScalarType> {
-        None
+    fn copyable(&self) -> bool {
+        false
     }
 }
 
@@ -176,6 +178,10 @@ impl ImportResolver for TestImportResolver {
     fn resolve_ffi_function(&self, name: &str) -> Result<Option<ForeignFunctionObj>> {
         Ok(None)
     }
+
+    fn prelude_ffi_functions(&self) -> Result<HashMap<String, ForeignFunctionObj>> {
+        Ok(Default::default())
+    }
 }
 
 pub struct MockImportResolver(IndexMap<String, String>);
@@ -203,7 +209,11 @@ impl ImportResolver for MockImportResolver {
         })
     }
 
-    fn resolve_ffi_function(&self, name: &str) -> Result<Option<ForeignFunctionObj>> {
+    fn resolve_ffi_function(&self, _name: &str) -> Result<Option<ForeignFunctionObj>> {
         Ok(None)
+    }
+
+    fn prelude_ffi_functions(&self) -> Result<HashMap<String, ForeignFunctionObj>> {
+        Ok(Default::default())
     }
 }

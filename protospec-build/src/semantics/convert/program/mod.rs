@@ -42,6 +42,9 @@ impl Program {
                 declared_inputs: IndexMap::new(),
             }));
 
+            // import prelude ffis
+            Scope::add_prelude_ffi(resolver, &*program)?;
+
             // import ffis
             for declaration in ast.declarations.iter() {
                 match declaration {
@@ -68,7 +71,8 @@ impl Program {
                     ast::Declaration::Type(type_) if matches!(type_.value.type_.raw_type, ast::RawType::Enum(_) | ast::RawType::Bitfield(_)) => {
                         let field = Scope::convert_type_declaration(type_, &*program)?;
                         let scope = Scope::convert_ast_field_arguments(&scope, &field, Some(&type_.arguments[..]))?;
-                        Scope::convert_ast_field(&scope, &type_.value, &field)?;
+                        Scope::convert_ast_field_mid(&scope, &type_.value, &field)?;
+                        Scope::convert_ast_field_end(&scope, &type_.value, &field)?;
                     }
                     ast::Declaration::Const(const_) => {
                         Scope::convert_const_declaration(const_, &*program, &scope)?;
@@ -96,7 +100,8 @@ impl Program {
 
             // convert rest
             for ((type_, field), sub_scope) in return_fields.into_iter().zip(sub_scopes.iter()) {
-                Scope::convert_ast_field(sub_scope, &type_.value, &field)?;
+                Scope::convert_ast_field_mid(sub_scope, &type_.value, &field)?;
+                Scope::convert_ast_field_end(sub_scope, &type_.value, &field)?;
             }
         }
 

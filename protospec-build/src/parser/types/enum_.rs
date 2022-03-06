@@ -1,5 +1,18 @@
 use super::*;
 
+fn parse_enum_value(t: &mut TokenIter, first: bool) -> ParseResult<EnumValue> {
+    if first {
+        t.expect(Token::Equal)?;
+    } else if t.eat(Token::Equal).is_none() {
+        return Ok(EnumValue::None);
+    }
+    if t.eat(Token::Default).is_some() {
+        Ok(EnumValue::Default)
+    } else {
+        Ok(EnumValue::Expression(Box::new(parse_expression(t)?)))
+    }
+}
+
 pub fn parse_enum(t: &mut TokenIter) -> ParseResult<Enum> {
     let start = t.expect(Token::Enum)?;
 
@@ -11,18 +24,9 @@ pub fn parse_enum(t: &mut TokenIter) -> ParseResult<Enum> {
 
     loop {
         let ident = t.expect_ident()?;
-        let expr = if items.len() == 0 {
-            t.expect(Token::Equal)?;
-            Some(Box::new(parse_expression(t)?))
-        } else {
-            if t.eat(Token::Equal).is_some() {
-                Some(Box::new(parse_expression(t)?))
-            } else {
-                None
-            }
-        };
+        let value = parse_enum_value(t, items.is_empty())?;
 
-        items.push((ident, expr));
+        items.push((ident, value));
         if !t.eat(Token::Comma).is_some() {
             break;
         }

@@ -38,10 +38,12 @@ impl Scope {
 
         let mut had_unconditional_field = false;
 
+        let mut field_scopes = vec![];
+
         let mut pad_count = 0;
         for item in type_.items.iter() {
             match item {
-                ContainerItem::Field(name, typ) => {
+                ContainerItem::Field(name, ast_field) => {
                     if let Some(defined) = items.get(&name.name) {
                         return Err(AsgError::ContainerFieldRedefinition(
                             name.name.clone(),
@@ -52,25 +54,26 @@ impl Scope {
                     let field_out = Arc::new(Field {
                         name: name.name.clone(),
                         type_: RefCell::new(Type::Bool),
+                        calculated: RefCell::new(None),
                         condition: RefCell::new(None),
                         transforms: RefCell::new(vec![]),
-                        span: typ.span,
+                        span: ast_field.span,
                         toplevel: false,
                         arguments: RefCell::new(vec![]),
-                        is_auto: Cell::new(false),
                         is_maybe_cyclical: Cell::new(false),
                         is_pad: Cell::new(false),
                     });
         
                     {
                         let sub_scope = Scope::convert_ast_field_arguments(&sub_scope, &field_out, None)?;
-                        Scope::convert_ast_field(&sub_scope, typ, &field_out)?;
+                        Scope::convert_ast_field_mid(&sub_scope, ast_field, &field_out)?;
+                        field_scopes.push((field_out.clone(), sub_scope, ast_field.clone()));
                     }
         
                     if had_unconditional_field && is_enum {
-                        return Err(AsgError::EnumContainerFieldAfterUnconditional(typ.span))
+                        return Err(AsgError::EnumContainerFieldAfterUnconditional(ast_field.span))
                     }
-                    if field_out.condition.borrow().is_none() {
+                    if ast_field.condition.is_none() {
                         had_unconditional_field = true;
                     }
         
@@ -92,29 +95,18 @@ impl Scope {
                     let field_out = Arc::new(Field {
                         name: name.clone(),
                         type_: RefCell::new(Type::Array(Box::new(ArrayType {
-                            element: Arc::new(Field {
-                                name: "$array_field".to_string(),
-                                type_: RefCell::new(Type::Scalar(ScalarType::U64)),
-                                arguments: RefCell::new(vec![]),
-                                condition: RefCell::new(None),
-                                transforms: RefCell::new(vec![]),
-                                span: *expr.span(),
-                                toplevel: false,
-                                is_auto: Cell::new(false),
-                                is_maybe_cyclical: Cell::new(false),
-                                is_pad: Cell::new(false),
-                            }),
+                            element: Box::new(Type::Scalar(ScalarType::U8)),
                             length: LengthConstraint {
                                 expandable: false,
                                 value: Some(len),
                             }
                         }))),
+                        calculated: RefCell::new(None),
                         condition: RefCell::new(None),
                         transforms: RefCell::new(vec![]),
                         span: *expr.span(),
                         toplevel: false,
                         arguments: RefCell::new(vec![]),
-                        is_auto: Cell::new(false),
                         is_maybe_cyclical: Cell::new(false),
                         is_pad: Cell::new(true),
                     });
@@ -122,6 +114,9 @@ impl Scope {
                     items.insert(name.clone(), field_out);
                 }
             }
+        }
+        for (out_field, sub_scope, ast_field) in field_scopes {
+            Scope::convert_ast_field_end(&sub_scope, &ast_field, &out_field)?;
         }
 
         Ok(Type::Container(Box::new(ContainerType {

@@ -2,7 +2,7 @@ use super::*;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Array {
-    pub element: Box<Field>,
+    pub interior_type: Box<Type>,
     pub length: LengthConstraint,
     pub span: Span,
 }

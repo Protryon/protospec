@@ -17,8 +17,31 @@ impl Scope {
         };
         let type_ = field.type_.borrow();
         let variant = match &*type_ {
-            Type::Enum(e) => &e.items,
-            Type::Bitfield(e) => &e.items,
+            Type::Enum(e) => {
+                let variant = e.items
+                    .get(&expr.variant.name)
+                    .ok_or(AsgError::UnresolvedEnumVariant(
+                        field.name.clone(),
+                        expr.variant.name.clone(),
+                        expr.variant.span,
+                    ))?;
+                match variant {
+                    EnumValue::Value(value) => value.clone(),
+                    EnumValue::Default => return Err(AsgError::ReferencedDefaultEnumVariant(
+                        field.name.clone(),
+                        expr.variant.name.clone(),
+                        expr.variant.span,    
+                    )),
+                }
+            },
+            Type::Bitfield(e) => e.items
+                .get(&expr.variant.name)
+                .ok_or(AsgError::UnresolvedBitfieldVariant(
+                    field.name.clone(),
+                    expr.variant.name.clone(),
+                    expr.variant.span,
+                ))?
+                .clone(),
             _ => {
                 return Err(AsgError::UnexpectedType(
                     field.type_.borrow().to_string(),
@@ -27,14 +50,6 @@ impl Scope {
                 ));
             }
         };
-        let variant = variant
-            .get(&expr.variant.name)
-            .ok_or(AsgError::UnresolvedEnumVariant(
-                field.name.clone(),
-                expr.variant.name.clone(),
-                expr.variant.span,
-            ))?
-            .clone();
         drop(type_);
 
         Ok(EnumAccessExpression {

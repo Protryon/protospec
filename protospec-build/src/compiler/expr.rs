@@ -303,7 +303,7 @@ pub fn emit_expression<F: Fn(&Arc<Field>) -> TokenStream>(
             let op = match c.op {
                 UnaryOp::Negate => quote! { - },
                 UnaryOp::Not => quote! { ! },
-                UnaryOp::BitNot => quote! { ~ },
+                UnaryOp::BitNot => quote! { ! },
             };
             quote! {
                 (#op #inner)
@@ -312,8 +312,22 @@ pub fn emit_expression<F: Fn(&Arc<Field>) -> TokenStream>(
         Cast(c) => {
             let inner = emit_expression(&c.inner, ref_resolver);
             let target = emit_type_ref(&c.type_);
-            quote! {
-                (#inner) as #target
+            match &*c.inner.get_type().unwrap().resolved() {
+                Type::Enum(_) => {
+                    quote! {
+                        (#inner).to_repr() as #target
+                    }
+                },
+                Type::Bitfield(_) => {
+                    quote! {
+                        (#inner).0 as #target
+                    }
+                },
+                _ => {
+                    quote! {
+                        (#inner) as #target
+                    }
+                },
             }
         }
         ArrayIndex(c) => {

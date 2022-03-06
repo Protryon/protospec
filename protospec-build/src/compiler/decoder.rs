@@ -42,12 +42,11 @@ fn prepare_decode(
             });
         }
         match instruction {
-            Instruction::Eval(target, expr) => {
+            Instruction::Eval(target, expr, field_register_map) => {
                 let target = emit_register(*target);
                 let value = emit_expression(expr, &|field| {
                     emit_register(
-                        *context
-                            .field_register_map
+                        *field_register_map
                             .get(&field.name)
                             .expect("missing register for field"),
                     )
@@ -287,7 +286,7 @@ fn prepare_decode(
                             let mut raw: Vec<u8> = Vec::with_capacity(t_count * size);
                             unsafe { raw.set_len(t_count * size) };
                             #target.read_exact(&mut raw[..])#async_?;
-                            raw.chunks_exact(size).map(|x| #type_::from_be_bytes(x.try_into().unwrap())).collect()
+                            raw.chunks_exact(size).map(|x| #type_::from_be_bytes(x.try_into().unwrap())).collect::<Vec<#type_>>()
                         };
                     });
                 } else {
@@ -296,7 +295,7 @@ fn prepare_decode(
                             let mut raw: Vec<u8> = Vec::new();
                             #target.read_to_end(&mut raw)#async_?;
                             let size = mem::size_of::<#type_>();
-                            raw.chunks_exact(size).map(|x| #type_::from_be_bytes(x.try_into().unwrap())).collect()
+                            raw.chunks_exact(size).map(|x| #type_::from_be_bytes(x.try_into().unwrap())).collect::<Vec<#type_>>()
                         };
                     });
                 }
@@ -314,7 +313,7 @@ fn prepare_decode(
                             let mut raw: Vec<u8> = Vec::with_capacity(t_count * size);
                             unsafe { raw.set_len(t_count * size) };
                             #target.read_exact(&mut raw[..])#async_?;
-                            raw.chunks_exact(size).map(|x| #enum_ident::from_repr(#type_::from_be_bytes(x.try_into().unwrap()))).collect()
+                            raw.chunks_exact(size).map(|x| #enum_ident::from_repr(#type_::from_be_bytes(x.try_into().unwrap()))).collect::<Result<Vec<#enum_ident>>>()?
                         };
                     });
                 } else {
@@ -323,7 +322,7 @@ fn prepare_decode(
                             let mut raw: Vec<u8> = Vec::new();
                             #target.read_to_end(&mut raw)#async_?;
                             let size = mem::size_of::<#type_>();
-                            raw.chunks_exact(size).map(|x| #enum_ident::from_repr(#type_::from_be_bytes(x.try_into().unwrap()))).collect()
+                            raw.chunks_exact(size).map(|x| #enum_ident::from_repr(#type_::from_be_bytes(x.try_into().unwrap()))).collect::<Result<Vec<#enum_ident>>>()?
                         };
                     });
                 }
@@ -388,16 +387,43 @@ fn prepare_decode(
                 });
             }
             Instruction::Conditional(target, interior, condition, inner) => {
-                let target = emit_register(*target);
-                let interior = emit_register(*interior);
+                let targets = target.iter().copied().map(emit_register).collect::<Vec<_>>();
+                let targets = flatten_separated(targets, quote! {,});
+                let targets = if target.len() > 1 {
+                    quote! { (#targets) }
+                } else {
+                    targets
+                };
+                let interiors = interior.iter().copied().map(|r| {
+                    let r = emit_register(r);
+                    quote! {
+                        Some(#r)
+                    }
+                }).collect::<Vec<_>>();
+                let anti_interiors = interior.iter().map(|_| quote! { None }).collect::<Vec<_>>();
+
+                let interiors = flatten_separated(interiors, quote! {,});
+                let interiors = if interior.len() > 1 {
+                    quote! { (#interiors) }
+                } else {
+                    interiors
+                };
+
+                let anti_interiors = flatten_separated(anti_interiors, quote! {,});
+                let anti_interiors = if interior.len() > 1 {
+                    quote! { (#anti_interiors) }
+                } else {
+                    anti_interiors
+                };
+
                 let condition = emit_register(*condition);
                 let inner = prepare_decode(options, context, &inner[..], is_async, false);
                 statements.push(quote! {
-                    let #target = if #condition {
+                    let #targets = if #condition {
                         #inner
-                        Some(#interior)
+                        #interiors
                     } else {
-                        None
+                        #anti_interiors
                     };
                 });
             }

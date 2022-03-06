@@ -225,6 +225,23 @@ fn test_enum_array() {
 }
 
 #[test]
+fn test_enum_default() {
+    parse(
+        r#"
+    type test = enum i32 {
+        test = 1,
+        west,
+        east,
+        north = 6,
+        south,
+        def = default,
+    };
+    "#,
+    )
+    .unwrap();
+}
+
+#[test]
 fn test_conditional() {
     parse(
         r#"
@@ -244,7 +261,7 @@ fn test_conditional_array() {
         r#"
     type test = container {
         is_present: bool,
-        data: u8[2] { is_present } [..],
+        data: u8[2][..] { is_present },
     };
     "#,
     )
@@ -314,20 +331,6 @@ fn test_transform_conditional() {
 }
 
 #[test]
-fn test_transform_conditional_array() {
-    parse(
-        r#"
-    type test = container {
-        len: u32,
-        is_present: bool,
-        data: u8[6] { is_present } -> gzip -> encrypt[..],
-    };
-    "#,
-    )
-    .unwrap();
-}
-
-#[test]
 fn test_transform_conditional_transform() {
     parse(
         r#"
@@ -350,7 +353,7 @@ fn test_transform_conditional_transform_array() {
         len: u32,
         is_present: bool,
         is_encrypted: bool,
-        data: u8[6] { is_present } -> gzip -> encrypt {is_encrypted}[len] -> base64,
+        data: u8[6*len] { is_present } -> gzip -> encrypt {is_encrypted} -> base64,
     };
     "#,
     )

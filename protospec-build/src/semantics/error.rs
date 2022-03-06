@@ -29,8 +29,10 @@ pub enum AsgError {
     CastTypeDefinition(Span),
     #[error("complex types cannot be declared in this context @ {0}")]
     IllegalComplexTypeDefinition(Span),
-    #[error("enum variant name already in use: '{0}' @ {1}, originally declared at {2}")]
-    EnumVariantRedefinition(String, Span, Span),
+    #[error("enum default variant already declared: '{0}' @ {1}")]
+    EnumDefaultRedefinition(String, Span),
+    #[error("enum variant name already in use: '{0}' @ {1}")]
+    EnumVariantRedefinition(String, Span),
     #[error("bitfield flag name already in use: '{0}' @ {1}, originally declared at {2}")]
     BitfieldFlagRedefinition(String, Span, Span),
     #[error("container field name already in use: '{0}' @ {1}, originally declared at {2}")]
@@ -51,8 +53,12 @@ pub enum AsgError {
     UnexpectedType(String, String, Span),
     #[error("illegal cast, cannot cast from {0} to {1} @ {2}")]
     IllegalCast(String, String, Span),
+    #[error("attempt reference default enum variant for enum {0}, {1} @ {2} is unsupported")]
+    ReferencedDefaultEnumVariant(String, String, Span),
     #[error("reference enum variant for enum {0}, {1} @ {2} is not a valid variant")]
     UnresolvedEnumVariant(String, String, Span),
+    #[error("reference bitfield variant for bitfield {0}, {1} @ {2} is not a valid variant")]
+    UnresolvedBitfieldVariant(String, String, Span),
     #[error("could not infer type @ {0} (try adding more explicit types)")]
     UninferredType(Span),
     #[error("could not parse int {0} @ {1} @ {1}")]

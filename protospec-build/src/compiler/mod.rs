@@ -290,6 +290,18 @@ fn flatten<T: IntoIterator<Item = TokenStream>>(iter: T) -> TokenStream {
     out
 }
 
+fn flatten_separated<T: IntoIterator<Item = TokenStream>>(iter: T, separator: TokenStream) -> TokenStream {
+    let mut out = quote! {};
+    for (i, item) in iter.into_iter().enumerate() {
+        if i == 0 {
+            out.append_all([item]);
+        } else {
+            out.append_all([separator.clone(), item]);
+        }
+    }
+    out
+}
+
 pub fn emit_type_ref(item: &Type) -> TokenStream {
     match item {
         Type::Container(_) => unimplemented!(),
@@ -297,7 +309,7 @@ pub fn emit_type_ref(item: &Type) -> TokenStream {
         Type::Bitfield(_) => unimplemented!(),
         Type::Scalar(s) => emit_ident(&s.to_string()),
         Type::Array(array_type) => {
-            let interior = emit_type_ref(&array_type.element.type_.borrow());
+            let interior = emit_type_ref(&*array_type.element);
             quote! {
                 Vec<#interior>
             }
@@ -313,26 +325,37 @@ pub fn emit_type_ref(item: &Type) -> TokenStream {
     }
 }
 
-fn generate_container_fields(access: TokenStream, item: &ContainerType) -> TokenStream {
-    let mut fields = vec![];
-    for (name, field) in item.flatten_view() {
+fn generate_container_fields_recur(access: TokenStream, item: &ContainerType, conditional: bool, fields: &mut Vec<TokenStream>) {
+    for (name, field) in &item.items {
         if field.is_pad.get() {
             continue;
         }
-        let name_ident = format_ident!("{}", name);
-        let type_ref = emit_type_ref(&field.type_.borrow());
-        let type_ref = if field.condition.borrow().is_some() {
-            quote! {
-                Option<#type_ref>
+        match &*field.type_.borrow() {
+            Type::Container(sub_item) => {
+                generate_container_fields_recur(access.clone(), sub_item, conditional || field.condition.borrow().is_some(), fields);
+            },
+            _ => {
+                let name_ident = format_ident!("{}", name);
+                let type_ref = emit_type_ref(&field.type_.borrow());
+                let type_ref = if conditional || field.condition.borrow().is_some() {
+                    quote! {
+                        Option<#type_ref>
+                    }
+                } else {
+                    type_ref
+                };
+        
+                fields.push(quote! {
+                    #access #name_ident: #type_ref,
+                });        
             }
-        } else {
-            type_ref
-        };
-
-        fields.push(quote! {
-            #access #name_ident: #type_ref,
-        });
+        }
     }
+}
+
+fn generate_container_fields(access: TokenStream, item: &ContainerType) -> TokenStream {
+    let mut fields = vec![];
+    generate_container_fields_recur(access, item, false, &mut fields);
     flatten(fields)
 }
 
@@ -377,7 +400,10 @@ pub fn generate_container(
             let default_value = match &*type_ {
                 Type::Container(sub_container) => {
                     let mut fields = vec![];
-                    for (name, _) in sub_container.flatten_view() {
+                    for (name, field) in sub_container.flatten_view() {
+                        if field.is_pad.get() {
+                            continue;
+                        }
                         let name_ident = format_ident!("{}", name);
                 
                         fields.push(quote! {
@@ -432,25 +458,56 @@ pub fn generate_enum(name: &str, item: &EnumType, options: &CompileOptions) -> T
     let name_ident = format_ident!("{}", global_name(name));
     let mut fields = vec![];
     let mut from_repr_matches = vec![];
-    for (name, cons) in item.items.iter() {
-        let value_ident = format_ident!("{}", name);
-        let value = eval_const_expression(&cons.value);
-        if value.is_none() {
-            unimplemented!("could not resolve constant expression");
+    let mut to_repr_matches = vec![];
+    let has_default = item.items.iter().position(|(_, x)| matches!(x, EnumValue::Default)).is_some();
+    let rep = format_ident!("{}", item.rep.to_string());
+
+    for (name, value) in item.items.iter() {
+        let discriminant_ident = format_ident!("{}", name);
+        match value {
+            EnumValue::Value(value) => {
+                let value = eval_const_expression(&value.value);
+                if value.is_none() {
+                    unimplemented!("could not resolve constant expression");
+                }
+                let value = value.unwrap();
+                let value = value.emit();
+                if has_default {
+                    fields.push(quote! {
+                        #discriminant_ident,
+                    });
+                    from_repr_matches.push(quote! {
+                        #value => Ok(#name_ident::#discriminant_ident),
+                    });
+                    to_repr_matches.push(quote! {
+                        #name_ident::#discriminant_ident => #value,
+                    });
+                } else {
+                    fields.push(quote! {
+                        #discriminant_ident = #value,
+                    });
+                    from_repr_matches.push(quote! {
+                        #value => Ok(#name_ident::#discriminant_ident),
+                    });
+                }
+            },
+            EnumValue::Default => {
+                fields.push(quote! {
+                    #discriminant_ident(#rep),
+                });
+                from_repr_matches.push(quote! {
+                    value => Ok(#name_ident::#discriminant_ident(value)),
+                });
+                to_repr_matches.push(quote! {
+                    #name_ident::#discriminant_ident(value) => value,
+                });
+            },
         }
-        let value = value.unwrap();
-        let value = value.emit();
-        fields.push(quote! {
-            #value_ident = #value,
-        });
-        from_repr_matches.push(quote! {
-            #value => Ok(#name_ident::#value_ident),
-        })
     }
     let fields = flatten(fields);
 
     let from_repr_matches = flatten(from_repr_matches);
-    let rep = format_ident!("{}", item.rep.to_string());
+
     let rep_size = item.rep.size() as usize;
     let derives = options.emit_enum_derives(&["Clone", "Copy"]);
 
@@ -470,8 +527,29 @@ pub fn generate_enum(name: &str, item: &EnumType, options: &CompileOptions) -> T
         quote! {}
     };
 
+    let to_repr = if has_default {
+        let to_repr_matches = flatten(to_repr_matches);
+        quote! {
+            match self {
+                #to_repr_matches
+            }
+        }
+    } else {
+        quote! {
+            self as #rep
+        }
+    };
+
+    let repr = if has_default {
+        quote! {}
+    } else {
+        quote! {
+            #[repr(#rep)]
+        }
+    };
+
     quote! {
-        #[repr(#rep)]
+        #repr
         #derives
         pub enum #name_ident {
             #fields
@@ -485,8 +563,12 @@ pub fn generate_enum(name: &str, item: &EnumType, options: &CompileOptions) -> T
                 }
             }
 
+            pub fn to_repr(self) -> #rep {
+                #to_repr
+            }
+
             pub fn to_be_bytes(&self) -> [u8; #rep_size] {
-                (*self as #rep).to_be_bytes()
+                self.to_repr().to_be_bytes()
             }
         }
 
@@ -494,12 +576,12 @@ pub fn generate_enum(name: &str, item: &EnumType, options: &CompileOptions) -> T
     }
 }
 
-pub fn generate_bitfield(name: &str, item: &BitfieldType, options: &CompileOptions) -> TokenStream {
-    let name_ident = format_ident!("{}", global_name(name));
+pub fn generate_bitfield(bitfield_name: &str, item: &BitfieldType, options: &CompileOptions) -> TokenStream {
+    let name_ident = format_ident!("{}", global_name(bitfield_name));
     let mut fields = vec![];
     let mut funcs = vec![];
     let mut all_fields = ConstInt::parse(item.rep, "0", crate::Span::default()).unwrap();
-    let zero = all_fields;
+    // let zero = all_fields;
 
     for (name, cons) in item.items.iter() {
         let name_ident = format_ident!("{}", name.to_snake().to_uppercase());
@@ -514,9 +596,9 @@ pub fn generate_bitfield(name: &str, item: &BitfieldType, options: &CompileOptio
             ConstValue::Int(x) => *x,
             _ => panic!("invalid const value type"),
         };
-        if (int_value & all_fields).unwrap() != zero {
-            panic!("overlapping bit fields");
-        }
+        // if (int_value & all_fields).unwrap() != zero {
+        //     panic!("overlapping bit fields: {}", bitfield_name);
+        // }
         all_fields = (all_fields | int_value).unwrap();
 
         let value = value.emit();
@@ -540,7 +622,7 @@ pub fn generate_bitfield(name: &str, item: &BitfieldType, options: &CompileOptio
     let rep_size = item.rep.size() as usize;
     let derives = options.emit_struct_derives(&["Clone", "Copy", "Default"]);
 
-    let format_string = format!("illegal bitfield value '{{}}' for bitfield '{}'", name);
+    let format_string = format!("illegal bitfield value '{{}}' for bitfield '{}'", bitfield_name);
     let all_fields = ConstValue::Int(all_fields).emit();
 
     quote! {

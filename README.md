@@ -181,7 +181,6 @@ Example implementation:
 * generics for types
 * support array-interior transformations & conditions in ASG
 * add ability to reference original field in transform
-* default entries in enums
 * more complex handling of auto fields
   * offsets
   * multiple length candidates (i.e. a ternary)
@@ -192,3 +191,5 @@ Example implementation:
 * DCG of top-level field dependencies & field reordering
 * clean up encoding/decoding
 * a ton of docs
+* enum default valued reference: `MyEnum::Default(5)`,
+* anonymous containers (guess presence of `container` keyword)

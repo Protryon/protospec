@@ -11,9 +11,9 @@ pub enum ParseError {
     UnexpectedEOF,
     #[error("unexpected token: {0}, expecting: {1}")]
     Unexpected(SpannedToken, String),
-    #[error("length constraint cannot be empty")]
+    #[error("length constraint cannot be empty @ '{0}'")]
     EmptyLengthConstraint(Span),
-    #[error("enum is missing representation scalar")]
+    #[error("enum is missing representation scalar @ '{0}'")]
     EnumMissingRep(Span),
     #[error("bitfield is missing representation scalar")]
     BitfieldMissingRep(Span),

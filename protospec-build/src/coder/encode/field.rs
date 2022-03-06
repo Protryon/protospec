@@ -9,21 +9,18 @@ impl Context {
             Type::Container(_) => (),
             Type::Enum(_) => (),
             Type::Bitfield(_) => (),
-            _ => {
+            type_ => {
+                let mut ops = vec![];
+                if !type_.copyable() {
+                    ops.push(FieldRef::Ref);
+                }
+                ops.push(FieldRef::TupleAccess(0));
+    
                 self.instructions
-                    .push(Instruction::GetField(0, 0, vec![FieldRef::TupleAccess(0)]))
+                    .push(Instruction::GetField(0, 0, ops))
             }
         }
-        let resolver: Resolver = Box::new(move |context: &mut Context, name: &str| {
-            let value = context.alloc_register();
-            context.instructions.push(Instruction::GetField(
-                value,
-                top,
-                vec![FieldRef::Name(name.to_string())],
-            ));
-            value
-        });
-        self.encode_field(Target::Direct, &resolver, top, field);
+        self.encode_field(Target::Direct, top, field, false);
     }
 
     pub fn encode_field_condition(&mut self, field: &Arc<Field>) -> Option<usize> {
@@ -40,14 +37,14 @@ impl Context {
     pub fn encode_field(
         &mut self,
         target: Target,
-        resolver: &Resolver,
         source: usize,
         field: &Arc<Field>,
+        conditional: bool,
     ) {
         let field_condition = self.encode_field_condition(field);
         let start = self.instructions.len();
         
-        self.encode_field_unconditional(target, resolver, source, field, field_condition.is_some());
+        self.encode_field_unconditional(target, source, field, field_condition.is_some(), field_condition.is_some() || conditional);
 
         if let Some(field_condition) = field_condition {
             let drained = self.instructions.drain(start..).collect();
@@ -60,10 +57,10 @@ impl Context {
     pub fn encode_field_unconditional(
         &mut self,
         mut target: Target,
-        resolver: &Resolver,
         source: usize,
         field: &Arc<Field>,
-        was_conditional: bool,
+        self_conditional: bool,
+        total_conditional: bool,
     ) {
         let mut new_streams = vec![];
 
@@ -110,11 +107,14 @@ impl Context {
             target = Target::Stream(new_stream);
         }
 
-        let source = if was_conditional {
+        let is_psuedocontainer = !field.toplevel && matches!(&*field.type_.borrow(), Type::Container(_));
+
+        let source = if self_conditional && !is_psuedocontainer && !field.calculated.borrow().is_some() && !field.is_pad.get() {
             let real_source = self.alloc_register();
             self.instructions.push(Instruction::NullCheck(
                 source,
                 real_source,
+                field.type_.borrow().copyable(),
                 "failed null check for conditional field".to_string(),
             ));
             real_source
@@ -134,7 +134,7 @@ impl Context {
                 self.instructions.push(Instruction::Eval(length_register, len));
                 self.instructions.push(Instruction::Pad(target, length_register));
             },
-            type_ => self.encode_type(field, type_, target, resolver, source),
+            type_ => self.encode_complex_type(field, type_, target, source, total_conditional),
         }
 
         for (stream, owned_stream) in new_streams.iter().rev() {

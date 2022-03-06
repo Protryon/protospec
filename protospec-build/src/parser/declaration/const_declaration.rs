@@ -4,7 +4,7 @@ pub fn parse_const_declaration(t: &mut TokenIter) -> ParseResult<ConstDeclaratio
     let start = t.expect(Token::Const)?;
     let name = t.expect_ident()?;
     t.expect(Token::Colon)?;
-    let type_ = parse_type(t, true)?;
+    let type_ = parse_type(t)?;
     t.expect(Token::Equal)?;
     let value = parse_expression(t)?;
 

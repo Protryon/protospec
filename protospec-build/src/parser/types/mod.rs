@@ -15,7 +15,7 @@ use enum_::*;
 mod bitfield;
 use bitfield::*;
 
-pub fn parse_type(t: &mut TokenIter, direct_array: bool) -> ParseResult<Type> {
+pub fn parse_type(t: &mut TokenIter) -> ParseResult<Type> {
     let start = t.peek_span()?;
 
     let raw_type = match t.peek()? {
@@ -58,25 +58,17 @@ pub fn parse_type(t: &mut TokenIter, direct_array: bool) -> ParseResult<Type> {
         raw_type,
     };
 
-    if direct_array {
-        while t.eat(Token::LeftSquare).is_some() {
-            let length = parse_length_constraint(t)?;
-            let end = t.expect(Token::RightSquare)?;
-            out = Type {
+    while t.eat(Token::LeftSquare).is_some() {
+        let length = parse_length_constraint(t)?;
+        let end = t.expect(Token::RightSquare)?;
+        out = Type {
+            span: start + end,
+            raw_type: RawType::Array(Array {
+                interior_type: Box::new(out),
+                length,
                 span: start + end,
-                raw_type: RawType::Array(Array {
-                    element: Box::new(Field {
-                        type_: out,
-                        condition: None,
-                        transforms: vec![],
-                        span: start,
-                        flags: vec![],
-                    }),
-                    length,
-                    span: start + end,
-                }),
-            };
-        }
+            }),
+        };
     }
 
     Ok(out)

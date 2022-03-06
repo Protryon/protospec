@@ -2,7 +2,7 @@ use super::*;
 
 #[derive(PartialEq, Clone, Debug)]
 pub struct ArrayType {
-    pub element: Arc<Field>,
+    pub element: Box<Type>,
     pub length: LengthConstraint,
 }
 

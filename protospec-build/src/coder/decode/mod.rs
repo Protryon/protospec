@@ -40,15 +40,32 @@ impl Context {
         }
     }
 
-    pub fn decode_type(&mut self, source: Target, field: &Arc<Field>) -> Option<usize> {
+    pub fn decode_complex_type(&mut self, source: Target, field: &Arc<Field>) -> Vec<usize> {
+        if field.is_pad.get() {
+            let array_type = field.type_.borrow();
+            let array_type = match &*array_type {
+                Type::Array(a) => &**a,
+                _ => panic!("invalid type for pad"),
+            };
+            let len = array_type.length.value.as_ref().cloned().unwrap();
+            let length_register = self.alloc_register();
+            self.instructions.push(Instruction::Eval(length_register, len, self.field_register_map.clone()));
+            self.instructions.push(Instruction::Skip(source, length_register));
+            return vec![];
+        }
+        match &*field.type_.borrow() {
+            Type::Container(type_) => self.decode_container(field, &**type_, source),
+            type_ => vec![self.decode_type(source, type_)],
+        }
+    }
+
+    pub fn decode_type(&mut self, source: Target, type_: &Type) -> usize {
         let output = self.alloc_register();
-        Some(match &*field.type_.borrow() {
-            Type::Container(type_) => {
-                return self.decode_container(field, &**type_, source);
-            },
-            Type::Array(type_) => {
-                return self.decode_array(field, &**type_, source);
+        match type_ {
+            Type::Container(_) => {
+                unimplemented!("invalid container in non-complex context");
             }
+            Type::Array(type_) => self.decode_array(&**type_, source),
             Type::Enum(e) => {
                 self.instructions.push(Instruction::DecodeRepr(
                     e.name.clone(),
@@ -112,7 +129,7 @@ impl Context {
                 let mut args = vec![];
                 for arg in r.arguments.iter() {
                     let r = self.alloc_register();
-                    self.instructions.push(Instruction::Eval(r, arg.clone()));
+                    self.instructions.push(Instruction::Eval(r, arg.clone(), self.field_register_map.clone()));
                     args.push(r);
                 }
                 if let Type::Foreign(f) = &*r.target.type_.borrow() {
@@ -132,6 +149,6 @@ impl Context {
                 }
                 output
             }
-        })
+        }
     }
 }

@@ -25,7 +25,7 @@ pub enum Constructable {
 
 #[derive(Debug)]
 pub enum Instruction {
-    Eval(usize, Expression),
+    Eval(usize, Expression, HashMap<String, usize>),
     Construct(usize, Constructable),
     // source, new_stream, len constraint
     Constrict(Target, usize, usize),
@@ -57,7 +57,7 @@ pub enum Instruction {
         Vec<Instruction>,
     ),
     LoopOutput(usize, usize), // output handle, item
-    Conditional(usize, usize, usize, Vec<Instruction>), // target, interior_register, condition, if_true
+    Conditional(Vec<usize>, Vec<usize>, usize, Vec<Instruction>), // target, interior_register, condition, if_true
     ConditionalPredicate(usize, Vec<Instruction>), // target, interior_register, condition, if_true
     /// returns from decoder early
     Return(usize),

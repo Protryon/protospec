@@ -111,7 +111,7 @@ impl ForeignType for VarInt {
         vec![]
     }
 
-    fn can_receive_auto(&self) -> Option<ScalarType> {
-        Some(self.scalar_type)
+    fn copyable(&self) -> bool {
+        true
     }
 }

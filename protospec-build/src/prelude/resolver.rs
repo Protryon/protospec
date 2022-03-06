@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use super::*;
 pub struct PreludeImportResolver<T: ImportResolver + 'static>(pub T);
 
@@ -33,9 +35,19 @@ impl<T: ImportResolver + 'static> ImportResolver for PreludeImportResolver<T> {
 
     fn resolve_ffi_function(&self, name: &str) -> Result<Option<ForeignFunctionObj>> {
         Ok(match name {
+            "blen" => Some(Box::new(BLenFunction)),
             "len" => Some(Box::new(LenFunction)),
             "pad" => Some(Box::new(PadFunction)),
+            "bits" => Some(Box::new(BitsFunction)),
+            "sum" => Some(Box::new(SumFunction)),
             x => self.0.resolve_ffi_function(x)?,
         })
+    }
+
+    fn prelude_ffi_functions(&self) -> Result<HashMap<String, ForeignFunctionObj>> {
+        let mut out = HashMap::new();
+        out.insert("len".to_string(), self.resolve_ffi_function("len")?.unwrap());
+        out.insert("blen".to_string(), self.resolve_ffi_function("blen")?.unwrap());
+        Ok(out)
     }
 }

@@ -4,14 +4,7 @@ impl Context {
     pub fn encode_var_ref(&mut self, type_: &TypeRef, target: Target, source: usize) {
         if let Type::Foreign(f) = &*type_.target.type_.borrow() {
             let mut function_args = vec![];
-            let arguments = f.obj.arguments();
-            for (expr, arg) in type_.arguments.iter().zip(arguments.iter()) {
-                if arg.can_resolve_auto {
-                    if let Some(auto) = self.check_auto(expr, source) {
-                        function_args.push(auto);
-                        continue;
-                    }
-                }
+            for expr in &type_.arguments {
                 let r = self.alloc_register();
                 self.instructions.push(Instruction::Eval(r, expr.clone()));
                 function_args.push(r);

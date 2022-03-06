@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::{result::*, ForeignFunctionObj, ForeignTransformObj, ForeignTypeObj};
 
 pub trait ImportResolver {
@@ -10,6 +12,8 @@ pub trait ImportResolver {
     fn resolve_ffi_type(&self, name: &str) -> Result<Option<ForeignTypeObj>>;
 
     fn resolve_ffi_function(&self, name: &str) -> Result<Option<ForeignFunctionObj>>;
+
+    fn prelude_ffi_functions(&self) -> Result<HashMap<String, ForeignFunctionObj>>;
 }
 
 pub struct NullImportResolver;
@@ -32,6 +36,10 @@ impl ImportResolver for NullImportResolver {
     }
 
     fn resolve_ffi_function(&self, _type: &str) -> Result<Option<ForeignFunctionObj>> {
+        Err(protospec_err!("null import resolver"))
+    }
+
+    fn prelude_ffi_functions(&self) -> Result<HashMap<String, ForeignFunctionObj>> {
         Err(protospec_err!("null import resolver"))
     }
 }

@@ -57,6 +57,24 @@ fn test_enum() {
 }
 
 #[test]
+fn test_enum_default_early() {
+    load_asg(
+        r#"
+    type test = enum i32 {
+        test = 1,
+        def = default,
+        west,
+        east,
+        north = 6,
+        south,
+    };
+    "#,
+    )
+    .err()
+    .unwrap();
+}
+
+#[test]
 fn test_conditional_bad() {
     load_asg(
         r#"

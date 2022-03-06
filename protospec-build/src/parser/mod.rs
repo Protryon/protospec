@@ -22,9 +22,6 @@ use field::*;
 mod program;
 use program::*;
 
-mod transform;
-use transform::*;
-
 pub fn parse(script: &str) -> ParseResult<Program> {
     let mut tokens = TokenIter::new(crate::tokenize(script, true)?);
 
@@ -47,16 +44,6 @@ fn parse_arguments(t: &mut TokenIter, span: &mut Span) -> ParseResult<Vec<Expres
         }
     }
     Ok(arguments)
-}
-
-fn parse_conditional_clause(t: &mut TokenIter) -> ParseResult<Option<Box<Expression>>> {
-    Ok(if t.eat(Token::LeftCurly).is_some() {
-        let condition = parse_expression(t)?;
-        t.expect(Token::RightCurly)?;
-        Some(Box::new(condition))
-    } else {
-        None
-    })
 }
 
 fn parse_flags(t: &mut TokenIter) -> ParseResult<Vec<Ident>> {

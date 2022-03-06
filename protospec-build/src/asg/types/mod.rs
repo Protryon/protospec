@@ -151,6 +151,40 @@ impl Type {
             _ => false,
         }
     }
+
+    pub fn copyable(&self) -> bool {
+        match &*self.resolved() {
+            Type::Enum(_) => true,
+            Type::Bitfield(_) => true,
+            Type::Scalar(_) => true,
+            Type::F32 => true,
+            Type::F64 => true,
+            Type::Bool => true,
+            Type::Foreign(foreign) => foreign.obj.copyable(),
+            _ => false,
+        }
+    }
+
+    pub(super) fn get_indirect_contained_fields(&self, target: &mut IndexSet<String>) {
+        match self {
+            Type::Array(interior) => {
+                interior.element.get_indirect_contained_fields(target);
+            }
+            Type::Container(interior) => {
+                for (_, field) in &interior.items {
+                    if target.insert(field.name.clone()) {
+                        field.get_indirect_contained_fields(target);
+                    }
+                }
+            }
+            Type::Ref(call) => {
+                if target.insert(call.target.name.clone()) {
+                    call.target.get_indirect_contained_fields(target);
+                }
+            }
+            _ => (),
+        }
+    }
 }
 
 impl PartialEq for Type {

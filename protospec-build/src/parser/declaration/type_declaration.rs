@@ -8,7 +8,7 @@ pub fn parse_type_declaration(t: &mut TokenIter) -> ParseResult<TypeDeclaration>
         while t.eat(Token::RightParen).is_none() {
             let name = t.expect_ident()?;
             t.expect(Token::Colon)?;
-            let inner_type = parse_type(t, true)?;
+            let inner_type = parse_type(t)?;
 
             let default_value = if t.eat(Token::Question).is_some() {
                 Some(parse_expression(t)?)

@@ -41,11 +41,19 @@ impl Scope {
         Ok(sub_scope)
     }
 
-    pub fn convert_ast_field(
+    pub fn convert_ast_field_mid(
         sub_scope: &Arc<RefCell<Scope>>,
         field: &ast::Field,
         into: &Arc<Field>,
     ) -> AsgResult<()> {
+        let purpose = if into.toplevel {
+            TypePurpose::TypeDefinition(into.name.clone())
+        } else {
+            TypePurpose::FieldInterior
+        };
+
+        let asg_type = Scope::convert_ast_type(&sub_scope, &field.type_.raw_type, purpose)?;
+
         let condition = if let Some(condition) = &field.condition {
             Some(Scope::convert_expr(
                 &sub_scope,
@@ -55,14 +63,6 @@ impl Scope {
         } else {
             None
         };
-
-        let purpose = if into.toplevel {
-            TypePurpose::TypeDefinition(into.name.clone())
-        } else {
-            TypePurpose::FieldInterior
-        };
-
-        let asg_type = Scope::convert_ast_type(&sub_scope, &field.type_.raw_type, purpose)?;
 
         let mut transforms = vec![];
         for ast::Transform {
@@ -101,25 +101,56 @@ impl Scope {
                 arguments,
             })
         }
-        let mut is_auto = false;
         for flag in field.flags.iter() {
             match &*flag.name {
-                "auto" => {
-                    match asg_type.resolved().as_ref() {
-                        Type::Scalar(_) => (),
-                        Type::Foreign(f) if f.obj.can_receive_auto().is_some() => (),
-                        other => return Err(AsgError::TypeNotAutoCompatible(other.to_string(), field.type_.span)),
-                    }
-                    is_auto = true;
-                }
                 x => return Err(AsgError::InvalidFlag(x.to_string(), flag.span)),
             }
         }
 
+        // if !into.toplevel && condition.is_some() {
+        //     if let Type::Container(type_) = &asg_type {
+        //         for (_, child) in type_.flatten_view() {
+        //             let mut child_condition = child.condition.borrow_mut();
+        //             if child_condition.is_none() {
+        //                 *child_condition = condition.clone();
+        //             } else {
+        //                 *child_condition = Some(Expression::Binary(BinaryExpression {
+        //                     op: BinaryOp::And,
+        //                     left: Box::new(condition.clone().unwrap()),
+        //                     right: Box::new(child_condition.clone().unwrap()),
+        //                     span: Span::default(),
+        //                 }));
+        //             }
+        //         }
+        //         condition = None;
+        //     }
+        // }
+
         into.type_.replace(asg_type);
         into.condition.replace(condition);
         into.transforms.replace(transforms);
-        into.is_auto.replace(is_auto);
+
+        Ok(())
+    }
+
+    pub fn convert_ast_field_end(
+        sub_scope: &Arc<RefCell<Scope>>,
+        field: &ast::Field,
+        into: &Arc<Field>,
+    ) -> AsgResult<()> {
+        let field_type = into.type_.borrow();
+
+        let calculated = if let Some(calculated) = &field.calculated {
+            Some(Scope::convert_expr(
+                &sub_scope,
+                &**calculated,
+                field_type.clone().into(),
+            )?)
+        } else {
+            None
+        };
+
+        into.calculated.replace(calculated);
 
         Ok(())
     }

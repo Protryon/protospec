@@ -5,6 +5,7 @@ use crate::ScalarType;
 
 #[derive(Debug)]
 pub enum FieldRef {
+    Ref,
     Name(String),
     ArrayAccess(usize),
     TupleAccess(usize),

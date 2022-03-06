@@ -6,8 +6,7 @@ impl ForeignType for Utf8 {
     fn assignable_from(&self, type_: &Type) -> bool {
         match type_ {
             Type::Array(inner) => {
-                let inner = inner.element.type_.borrow();
-                Type::Scalar(ScalarType::U8).assignable_from(&*inner)
+                Type::Scalar(ScalarType::U8).assignable_from(&*inner.element)
             }
             _ => false,
         }
@@ -92,7 +91,7 @@ impl ForeignType for Utf8 {
         }]
     }
 
-    fn can_receive_auto(&self) -> Option<ScalarType> {
-        None
+    fn copyable(&self) -> bool {
+        false
     }
 }

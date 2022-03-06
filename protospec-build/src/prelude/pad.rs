@@ -27,9 +27,9 @@ impl ForeignFunction for PadFunction {
         let base = &arguments[1].value;
         return quote! {
             if #base % #pad == 0 {
-                #base
+                0
             } else {
-                #base + (#pad - (#base % #pad))
+                (#pad - (#base % #pad))
             }
         };
     }

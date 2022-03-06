@@ -1,8 +1,8 @@
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 
 use super::*;
 use crate::asg::*;
-use std::{sync::Arc, collections::HashMap};
+use std::sync::Arc;
 
 mod instruction;
 pub use instruction::*;
@@ -19,16 +19,14 @@ pub use array::*;
 mod var_ref;
 pub use var_ref::*;
 
-mod auto;
-pub use auto::*;
-
-type Resolver = Box<dyn Fn(&mut Context, &str) -> usize>;
-
 #[derive(Debug)]
 pub struct Context {
     pub register_count: usize,
     pub instructions: Vec<Instruction>,
+    // map of resolved field name -> register
     pub resolved_autos: IndexMap<String, usize>,
+    // set of pending field name
+    pub pending_autos: IndexSet<String>,
 }
 
 impl Context {
@@ -45,20 +43,27 @@ impl Context {
             instructions: vec![],
             register_count: 0,
             resolved_autos: IndexMap::new(),
+            pending_autos: IndexSet::new(),
         }
     }
 
-    pub fn encode_type(&mut self, field: &Arc<Field>, type_: &Type, target: Target, resolver: &Resolver, source: usize) {
+    pub fn encode_complex_type(&mut self, field: &Arc<Field>, type_: &Type, target: Target, source: usize, conditional: bool) {
         match type_ {
-            Type::Container(type_) => {
-                self.encode_container(field, &**type_, target, resolver, source);
+            Type::Container(type_) => self.encode_container(field, &**type_, target, source, conditional),
+            type_ => self.encode_type(type_, target, source),
+        }
+    }
+
+    pub fn encode_type(&mut self, type_: &Type, target: Target, source: usize) {
+        match type_ {
+            Type::Container(_) => {
+                unimplemented!("invalid container in non-complex context");
             },
             Type::Array(type_) => {
-                self.encode_array(type_, target, resolver, source);
+                self.encode_array(type_, target, source);
             }
-            Type::Enum(e) => {
+            Type::Enum(_) => {
                 self.instructions.push(Instruction::EncodeEnum(
-                    PrimitiveType::Scalar(e.rep.clone()),
                     target,
                     source,
                 ));

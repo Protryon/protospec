@@ -25,7 +25,7 @@ impl PartialType {
             (PartialType::Scalar(PartialScalarType::None), _) => true,
             (PartialType::Array(None), Type::Array(_)) => true,
             (PartialType::Array(Some(element)), Type::Array(array_type)) => {
-                element.assignable_from(&array_type.element.type_.borrow())
+                element.assignable_from(array_type.element.as_ref())
             }
             (PartialType::Any, _) => true,
             _ => false,
@@ -81,7 +81,7 @@ impl Into<PartialType> for Type {
             Type::Ref(x) => x.target.type_.borrow().clone().into(),
             Type::Scalar(x) => PartialType::Scalar(PartialScalarType::Some(x)),
             Type::Array(x) => {
-                PartialType::Array(Some(Box::new(x.element.type_.borrow().clone().into())))
+                PartialType::Array(Some(Box::new(x.element.as_ref().clone().into())))
             }
             x => PartialType::Type(x),
         }

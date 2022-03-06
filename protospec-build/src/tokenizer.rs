@@ -44,6 +44,7 @@ pub enum Token {
     LeftCurly,
     RightCurly,
     Enum,
+    Default,
     Bitfield,
     LtEq,
     GtEq,
@@ -119,6 +120,7 @@ impl fmt::Display for Token {
             LeftCurly => write!(f, "{{"),
             RightCurly => write!(f, "}}"),
             Enum => write!(f, "enum "),
+            Default => write!(f, "default "),
             Bitfield => write!(f, "bitfield "),
             LtEq => write!(f, "<= "),
             GtEq => write!(f, ">= "),
@@ -412,6 +414,7 @@ impl Token {
                     "f32" => Token::F32,
                     "f64" => Token::F64,
                     "enum" => Token::Enum,
+                    "default" => Token::Default,
                     "bitfield" => Token::Bitfield,
                     "bool" => Token::Bool,
                     "from" => Token::From,
@@ -613,6 +616,7 @@ mod tests {
         f32
         f64
         enum
+        default
         bitfield
         true
         false
@@ -632,7 +636,7 @@ mod tests {
             output,
             r#"test_ident"string""str"ing""str\ing"12345-12345type as import import_ffi i8 u8 transform function const /*
 
-        test block*/ container f32 f64 enum bitfield true false bool from ,;:?[]{}< > ?+-/ *%.. <= >= = == != ! ()// test$
+        test block*/ container f32 f64 enum default bitfield true false bool from ,;:?[]{}< > ?+-/ *%.. <= >= = == != ! ()// test$
 :> || && | ^| >> << >>> ~. ?: //
 "#
         );

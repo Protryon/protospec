@@ -21,10 +21,10 @@ pub struct Field {
     pub arguments: RefCell<Vec<TypeArgument>>,
     pub span: Span,
     pub type_: RefCell<Type>,
+    pub calculated: RefCell<Option<Expression>>,
     pub condition: RefCell<Option<Expression>>,
     pub transforms: RefCell<Vec<TypeTransform>>,
     pub toplevel: bool,
-    pub is_auto: Cell<bool>,
     pub is_maybe_cyclical: Cell<bool>,
     pub is_pad: Cell<bool>,
 }
@@ -32,26 +32,7 @@ pub struct Field {
 impl Field {
     pub(super) fn get_indirect_contained_fields(&self, target: &mut IndexSet<String>) {
         let type_ = self.type_.borrow();
-        match &*type_ {
-            Type::Array(interior) => {
-                if target.insert(interior.element.name.clone()) {
-                    interior.element.get_indirect_contained_fields(target);
-                }
-            }
-            Type::Container(interior) => {
-                for (_, field) in &interior.items {
-                    if target.insert(field.name.clone()) {
-                        field.get_indirect_contained_fields(target);
-                    }
-                }
-            }
-            Type::Ref(call) => {
-                if target.insert(call.target.name.clone()) {
-                    call.target.get_indirect_contained_fields(target);
-                }
-            }
-            _ => (),
-        }
+        type_.get_indirect_contained_fields(target);
     }
 }
 

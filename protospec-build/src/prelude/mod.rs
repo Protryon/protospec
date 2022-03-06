@@ -29,8 +29,17 @@ pub use utf16::*;
 mod len;
 pub use len::*;
 
+mod blen;
+pub use blen::*;
+
 mod pad;
 pub use pad::*;
+
+mod bits;
+pub use bits::*;
+
+mod sum;
+pub use sum::*;
 
 pub fn map_async(is_async: bool) -> TokenStream {
     if is_async {

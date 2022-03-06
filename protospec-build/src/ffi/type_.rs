@@ -1,6 +1,6 @@
 use proc_macro2::TokenStream;
 
-use crate::{asg::{Type, TypeArgument}, PartialType, ScalarType, PartialScalarType};
+use crate::{asg::{Type, TypeArgument}, PartialType, PartialScalarType};
 
 
 pub type ForeignTypeObj = Box<dyn ForeignType + 'static>;
@@ -84,6 +84,6 @@ pub trait ForeignType {
     /// All optional arguments must come at the end of the list of arguments.
     fn arguments(&self) -> Vec<TypeArgument>;
 
-    /// If `Some`, this type can receive `auto` defined lengths during encoding
-    fn can_receive_auto(&self) -> Option<ScalarType>;
+    /// If true, this type can be freely copied
+    fn copyable(&self) -> bool;
 }

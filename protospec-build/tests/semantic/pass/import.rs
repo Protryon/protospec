@@ -13,7 +13,7 @@ fn base_import() -> MockImportResolver {
     };
 
     type test_container2 = container {
-        data: test_type -> test_transform[2],
+        data: test_type[2] -> test_transform,
     };
     "#;
     let mut mocked_import = MockImportResolver(IndexMap::new());
