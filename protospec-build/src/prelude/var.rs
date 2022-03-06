@@ -1,4 +1,4 @@
-use crate::{emit_type_ref, PartialType, PartialScalarType};
+use crate::{emit_type_ref, PartialScalarType, PartialType};
 
 use super::*;
 
@@ -11,30 +11,34 @@ impl VarInt {
     pub fn new(scalar_type: ScalarType) -> Self {
         VarInt {
             scalar_type,
-            unsigned: Type::Scalar(match scalar_type {
-                x if !x.is_signed() => x,
-                ScalarType::I8 => ScalarType::U8,
-                ScalarType::I16 => ScalarType::U16,
-                ScalarType::I32 => ScalarType::U32,
-                ScalarType::I64 => ScalarType::U64,
-                ScalarType::I128 => ScalarType::U128,
-                _ => unimplemented!(),
-            }),
+            unsigned: Type::Scalar(
+                match scalar_type {
+                    x if !x.is_signed() => x,
+                    ScalarType::I8 => ScalarType::U8,
+                    ScalarType::I16 => ScalarType::U16,
+                    ScalarType::I32 => ScalarType::U32,
+                    ScalarType::I64 => ScalarType::U64,
+                    ScalarType::I128 => ScalarType::U128,
+                    _ => unimplemented!(),
+                }
+                .into(),
+            ),
         }
     }
 }
 
 impl ForeignType for VarInt {
     fn assignable_from(&self, type_: &Type) -> bool {
-        Type::Scalar(self.scalar_type).assignable_from(type_)
+        Type::Scalar(self.scalar_type.into()).assignable_from(type_)
     }
 
     fn assignable_from_partial(&self, type_: &PartialType) -> bool {
         match type_ {
             PartialType::Type(t) => self.assignable_from(t),
-            PartialType::Scalar(PartialScalarType::Some(scalar)) |
-            PartialType::Scalar(PartialScalarType::Defaults(scalar))
-                => self.assignable_from(&Type::Scalar(*scalar)),
+            PartialType::Scalar(PartialScalarType::Some(scalar))
+            | PartialType::Scalar(PartialScalarType::Defaults(scalar)) => {
+                self.assignable_from(&Type::Scalar((*scalar).into()))
+            }
             _ => false,
         }
     }
@@ -43,18 +47,20 @@ impl ForeignType for VarInt {
         match type_ {
             PartialType::Type(t) => self.assignable_to(t),
             PartialType::Any => true,
-            PartialType::Scalar(PartialScalarType::Some(scalar)) => self.assignable_from(&Type::Scalar(*scalar)),
+            PartialType::Scalar(PartialScalarType::Some(scalar)) => {
+                self.assignable_from(&Type::Scalar((*scalar).into()))
+            }
             PartialType::Scalar(_) => true,
             _ => false,
         }
     }
 
     fn assignable_to(&self, type_: &Type) -> bool {
-        type_.assignable_from(&Type::Scalar(self.scalar_type))
+        type_.assignable_from(&Type::Scalar(self.scalar_type.into()))
     }
 
     fn type_ref(&self) -> TokenStream {
-        emit_type_ref(&Type::Scalar(self.scalar_type))
+        emit_type_ref(&Type::Scalar(self.scalar_type.into()))
     }
 
     fn decoding_gen(

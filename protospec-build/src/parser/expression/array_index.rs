@@ -25,7 +25,6 @@ pub fn parse_array_index_expression(t: &mut TokenIter) -> ParseResult<Expression
         }
     }
 
-    while t.eat(Token::LeftSquare).is_some() {
-    }
+    while t.eat(Token::LeftSquare).is_some() {}
     Ok(expr)
 }

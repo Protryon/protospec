@@ -47,9 +47,18 @@ impl Context {
         }
     }
 
-    pub fn encode_complex_type(&mut self, field: &Arc<Field>, type_: &Type, target: Target, source: usize, conditional: bool) {
+    pub fn encode_complex_type(
+        &mut self,
+        field: &Arc<Field>,
+        type_: &Type,
+        target: Target,
+        source: usize,
+        conditional: bool,
+    ) {
         match type_ {
-            Type::Container(type_) => self.encode_container(field, &**type_, target, source, conditional),
+            Type::Container(type_) => {
+                self.encode_container(field, &**type_, target, source, conditional)
+            }
             type_ => self.encode_type(type_, target, source),
         }
     }
@@ -58,21 +67,17 @@ impl Context {
         match type_ {
             Type::Container(_) => {
                 unimplemented!("invalid container in non-complex context");
-            },
+            }
             Type::Array(type_) => {
                 self.encode_array(type_, target, source);
             }
-            Type::Enum(_) => {
-                self.instructions.push(Instruction::EncodeEnum(
-                    target,
-                    source,
-                ));
+            Type::Enum(e) => {
+                self.instructions
+                    .push(Instruction::EncodeEnum(target, source, e.rep));
             }
-            Type::Bitfield(_) => {
-                self.instructions.push(Instruction::EncodeBitfield(
-                    target,
-                    source,
-                ));
+            Type::Bitfield(e) => {
+                self.instructions
+                    .push(Instruction::EncodeBitfield(target, source, e.rep));
             }
             Type::Scalar(s) => {
                 self.instructions.push(Instruction::EncodePrimitive(

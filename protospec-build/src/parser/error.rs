@@ -1,5 +1,5 @@
+use crate::{result::*, Span, SpannedToken};
 use thiserror::Error;
-use crate::{result::*, SpannedToken, Span};
 
 pub type ParseResult<T> = StdResult<T, ParseError>;
 

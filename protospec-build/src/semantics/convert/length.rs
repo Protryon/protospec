@@ -1,6 +1,5 @@
 use super::*;
 
-
 impl Scope {
     pub fn convert_length(
         self_: &Arc<RefCell<Scope>>,
@@ -13,11 +12,11 @@ impl Scope {
                     self_,
                     inner,
                     if typ.expandable {
-                        PartialType::Array(Some(Box::new(PartialType::Scalar(PartialScalarType::Some(
-                            ScalarType::U8,
-                        )))))
+                        PartialType::Array(Some(Box::new(PartialType::Scalar(
+                            PartialScalarType::Some(ScalarType::U8),
+                        ))))
                     } else {
-                        Type::Scalar(ScalarType::U64).into()
+                        Type::Scalar(ScalarType::U64.into()).into()
                     },
                 )?)
             } else {

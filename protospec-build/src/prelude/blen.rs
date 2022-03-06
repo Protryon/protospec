@@ -13,7 +13,7 @@ impl ForeignFunction for BLenFunction {
     }
 
     fn return_type(&self) -> Type {
-        Type::Scalar(ScalarType::U64)
+        Type::Scalar(ScalarType::U64.into())
     }
 
     fn call(&self, _arguments: &[FFIArgumentValue]) -> TokenStream {

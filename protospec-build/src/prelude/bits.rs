@@ -4,17 +4,15 @@ pub struct BitsFunction;
 
 impl ForeignFunction for BitsFunction {
     fn arguments(&self) -> Vec<FFIArgument> {
-        vec![
-            FFIArgument {
-                name: "input".to_string(),
-                type_: Some(Type::Scalar(ScalarType::U64)),
-                optional: false,
-            },
-        ]
+        vec![FFIArgument {
+            name: "input".to_string(),
+            type_: Some(Type::Scalar(ScalarType::U64.into())),
+            optional: false,
+        }]
     }
 
     fn return_type(&self) -> Type {
-        Type::Scalar(ScalarType::U8)
+        Type::Scalar(ScalarType::U8.into())
     }
 
     fn call(&self, arguments: &[FFIArgumentValue]) -> TokenStream {

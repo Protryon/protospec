@@ -53,4 +53,3 @@ fn parse_flags(t: &mut TokenIter) -> ParseResult<Vec<Ident>> {
     }
     Ok(out)
 }
-

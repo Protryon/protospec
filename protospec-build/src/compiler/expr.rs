@@ -140,7 +140,7 @@ impl ConstValue {
 
     pub fn cast_to(&self, target: &Type) -> Option<Self> {
         match (self, target) {
-            (ConstValue::Int(i1), Type::Scalar(s)) => Some(ConstValue::Int(i1.cast_to(*s))),
+            (ConstValue::Int(i1), Type::Scalar(s)) => Some(ConstValue::Int(i1.cast_to(s.scalar))),
             (ConstValue::F32(i1), Type::F32) => Some(ConstValue::F32(*i1 as f32)),
             (ConstValue::F64(i1), Type::F32) => Some(ConstValue::F32(*i1 as f32)),
             (ConstValue::F32(i1), Type::F64) => Some(ConstValue::F64(*i1 as f64)),
@@ -203,8 +203,8 @@ pub fn eval_const_expression(expr: &Expression) -> Option<ConstValue> {
                 (ConstValue::Int(target), ConstValue::Int(member)) => {
                     // todo: find better way to get same-typed zero
                     Some(ConstValue::Bool((target & member)? != (member - member)?))
-                },
-                _ => unimplemented!("can not use member exprs on nonint targets")
+                }
+                _ => unimplemented!("can not use member exprs on nonint targets"),
             }
         }
         Unary(c) => {
@@ -317,17 +317,17 @@ pub fn emit_expression<F: Fn(&Arc<Field>) -> TokenStream>(
                     quote! {
                         (#inner).to_repr() as #target
                     }
-                },
+                }
                 Type::Bitfield(_) => {
                     quote! {
                         (#inner).0 as #target
                     }
-                },
+                }
                 _ => {
                     quote! {
                         (#inner) as #target
                     }
-                },
+                }
             }
         }
         ArrayIndex(c) => {

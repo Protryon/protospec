@@ -29,8 +29,13 @@ pub fn parse_container(t: &mut TokenIter) -> ParseResult<Container> {
                         break;
                     }
                     continue;
-                },
-                _ => return Err(ParseError::UnknownContainerDirective(ident.name.clone(), ident.span)),
+                }
+                _ => {
+                    return Err(ParseError::UnknownContainerDirective(
+                        ident.name.clone(),
+                        ident.span,
+                    ))
+                }
             }
         }
 

@@ -5,7 +5,8 @@ impl Context {
         let terminator = if type_.length.expandable && type_.length.value.is_some() {
             let len = type_.length.value.as_ref().cloned().unwrap();
             let r = self.alloc_register();
-            self.instructions.push(Instruction::Eval(r, len, self.field_register_map.clone()));
+            self.instructions
+                .push(Instruction::Eval(r, len, self.field_register_map.clone()));
             Some(r)
         } else {
             None
@@ -16,7 +17,8 @@ impl Context {
         } else {
             let len = type_.length.value.as_ref().cloned().unwrap();
             let r = self.alloc_register();
-            self.instructions.push(Instruction::Eval(r, len, self.field_register_map.clone()));
+            self.instructions
+                .push(Instruction::Eval(r, len, self.field_register_map.clone()));
             Some(r)
         };
 

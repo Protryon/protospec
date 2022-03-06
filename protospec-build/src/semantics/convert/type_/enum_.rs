@@ -28,14 +28,14 @@ impl Scope {
                 ast::EnumValue::Default => {
                     has_default = true;
                     EnumValue::Default
-                },
+                }
                 item => {
                     let value = match item {
                         ast::EnumValue::Default => unreachable!(),
                         ast::EnumValue::Expression(expr) => Scope::convert_expr(
                             self_,
                             &**expr,
-                            PartialType::Scalar(PartialScalarType::Some(type_.rep)),
+                            PartialType::Scalar(PartialScalarType::Some(type_.rep.scalar)),
                         )?,
                         ast::EnumValue::None => Expression::Binary(BinaryExpression {
                             op: crate::BinaryOp::Add,
@@ -44,11 +44,11 @@ impl Scope {
                             )),
                             right: Box::new(Expression::Int(Int {
                                 value: ConstInt::parse(
-                                    type_.rep,
+                                    type_.rep.scalar,
                                     &*format!("{}", undefined_counter),
                                     name.span,
                                 )?,
-                                type_: type_.rep,
+                                type_: type_.rep.scalar,
                                 span: name.span,
                             })),
                             span: type_.span,

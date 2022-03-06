@@ -12,7 +12,11 @@ impl Scope {
             .length
             .as_ref()
             .map(|x| {
-                Scope::convert_expr(self_, &**x, PartialType::Scalar(PartialScalarType::Defaults(ScalarType::U64)))
+                Scope::convert_expr(
+                    self_,
+                    &**x,
+                    PartialType::Scalar(PartialScalarType::Defaults(ScalarType::U64)),
+                )
             })
             .transpose()?;
 
@@ -27,7 +31,7 @@ impl Scope {
         if is_enum && !matches!(purpose, TypePurpose::TypeDefinition(_)) {
             return Err(AsgError::MustBeToplevel(type_.span));
         }
-        
+
         let mut items: IndexMap<String, Arc<Field>> = IndexMap::new();
         let sub_scope = Arc::new(RefCell::new(Scope {
             parent_scope: Some(self_.clone()),
@@ -63,20 +67,23 @@ impl Scope {
                         is_maybe_cyclical: Cell::new(false),
                         is_pad: Cell::new(false),
                     });
-        
+
                     {
-                        let sub_scope = Scope::convert_ast_field_arguments(&sub_scope, &field_out, None)?;
+                        let sub_scope =
+                            Scope::convert_ast_field_arguments(&sub_scope, &field_out, None)?;
                         Scope::convert_ast_field_mid(&sub_scope, ast_field, &field_out)?;
                         field_scopes.push((field_out.clone(), sub_scope, ast_field.clone()));
                     }
-        
+
                     if had_unconditional_field && is_enum {
-                        return Err(AsgError::EnumContainerFieldAfterUnconditional(ast_field.span))
+                        return Err(AsgError::EnumContainerFieldAfterUnconditional(
+                            ast_field.span,
+                        ));
                     }
                     if ast_field.condition.is_none() {
                         had_unconditional_field = true;
                     }
-        
+
                     sub_scope
                         .borrow_mut()
                         .declared_fields
@@ -90,16 +97,20 @@ impl Scope {
                     let name = format!("_pad{}", pad_count);
                     pad_count += 1;
 
-                    let len = Scope::convert_expr(&sub_scope, expr, PartialType::Scalar(PartialScalarType::Some(ScalarType::U64)))?;
+                    let len = Scope::convert_expr(
+                        &sub_scope,
+                        expr,
+                        PartialType::Scalar(PartialScalarType::Some(ScalarType::U64)),
+                    )?;
 
                     let field_out = Arc::new(Field {
                         name: name.clone(),
                         type_: RefCell::new(Type::Array(Box::new(ArrayType {
-                            element: Box::new(Type::Scalar(ScalarType::U8)),
+                            element: Box::new(Type::Scalar(ScalarType::U8.into())),
                             length: LengthConstraint {
                                 expandable: false,
                                 value: Some(len),
-                            }
+                            },
                         }))),
                         calculated: RefCell::new(None),
                         condition: RefCell::new(None),
@@ -110,7 +121,7 @@ impl Scope {
                         is_maybe_cyclical: Cell::new(false),
                         is_pad: Cell::new(true),
                     });
-        
+
                     items.insert(name.clone(), field_out);
                 }
             }

@@ -71,7 +71,9 @@ pub enum AsgError {
     InvalidTypeArgumentOrder(Span),
     #[error("invalid or unknown flag '{0}' @ {1}")]
     InvalidFlag(String, Span),
-    #[error("illegal repitition of type -- outline the interior as a top level type declaration @ {0}")]
+    #[error(
+        "illegal repitition of type -- outline the interior as a top level type declaration @ {0}"
+    )]
     InlineRepetition(Span),
     #[error("enums, bitfields, and enum containers must be top level @ {0}")]
     MustBeToplevel(Span),

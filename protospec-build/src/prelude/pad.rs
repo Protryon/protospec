@@ -7,19 +7,19 @@ impl ForeignFunction for PadFunction {
         vec![
             FFIArgument {
                 name: "pad".to_string(),
-                type_: Some(Type::Scalar(ScalarType::U64)),
+                type_: Some(Type::Scalar(ScalarType::U64.into())),
                 optional: false,
             },
             FFIArgument {
                 name: "base".to_string(),
-                type_: Some(Type::Scalar(ScalarType::U64)),
+                type_: Some(Type::Scalar(ScalarType::U64.into())),
                 optional: false,
-            }
+            },
         ]
     }
 
     fn return_type(&self) -> Type {
-        Type::Scalar(ScalarType::U64)
+        Type::Scalar(ScalarType::U64.into())
     }
 
     fn call(&self, arguments: &[FFIArgumentValue]) -> TokenStream {

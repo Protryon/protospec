@@ -59,7 +59,12 @@ impl Program {
             for declaration in ast.declarations.iter() {
                 match declaration {
                     ast::Declaration::Import(import) => {
-                        Scope::convert_import_declaration(import, resolver, &*program, import_cache)?;
+                        Scope::convert_import_declaration(
+                            import,
+                            resolver,
+                            &*program,
+                            import_cache,
+                        )?;
                     }
                     _ => (),
                 }
@@ -68,9 +73,18 @@ impl Program {
             // consts and enums
             for declaration in ast.declarations.iter() {
                 match declaration {
-                    ast::Declaration::Type(type_) if matches!(type_.value.type_.raw_type, ast::RawType::Enum(_) | ast::RawType::Bitfield(_)) => {
+                    ast::Declaration::Type(type_)
+                        if matches!(
+                            type_.value.type_.raw_type,
+                            ast::RawType::Enum(_) | ast::RawType::Bitfield(_)
+                        ) =>
+                    {
                         let field = Scope::convert_type_declaration(type_, &*program)?;
-                        let scope = Scope::convert_ast_field_arguments(&scope, &field, Some(&type_.arguments[..]))?;
+                        let scope = Scope::convert_ast_field_arguments(
+                            &scope,
+                            &field,
+                            Some(&type_.arguments[..]),
+                        )?;
                         Scope::convert_ast_field_mid(&scope, &type_.value, &field)?;
                         Scope::convert_ast_field_end(&scope, &type_.value, &field)?;
                     }
@@ -84,7 +98,12 @@ impl Program {
             // remaining fields
             for declaration in ast.declarations.iter() {
                 match declaration {
-                    ast::Declaration::Type(type_) if !matches!(type_.value.type_.raw_type, ast::RawType::Enum(_) | ast::RawType::Bitfield(_)) => {
+                    ast::Declaration::Type(type_)
+                        if !matches!(
+                            type_.value.type_.raw_type,
+                            ast::RawType::Enum(_) | ast::RawType::Bitfield(_)
+                        ) =>
+                    {
                         let field = Scope::convert_type_declaration(type_, &*program)?;
                         return_fields.push((type_, field));
                     }
@@ -95,7 +114,11 @@ impl Program {
             // convert arguments
             let mut sub_scopes = vec![];
             for (type_, field) in &return_fields {
-                sub_scopes.push(Scope::convert_ast_field_arguments(&scope, &field, Some(&type_.arguments[..]))?);
+                sub_scopes.push(Scope::convert_ast_field_arguments(
+                    &scope,
+                    &field,
+                    Some(&type_.arguments[..]),
+                )?);
             }
 
             // convert rest

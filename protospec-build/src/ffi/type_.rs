@@ -1,18 +1,20 @@
 use proc_macro2::TokenStream;
 
-use crate::{asg::{Type, TypeArgument}, PartialType, PartialScalarType};
-
+use crate::{
+    asg::{Type, TypeArgument},
+    PartialScalarType, PartialType,
+};
 
 pub type ForeignTypeObj = Box<dyn ForeignType + 'static>;
 
 /// An encodable and decodable foreign type object
 /// Generally these are used to represent complexly encoded types,
 /// where there isn't a notion of smaller internal types
-/// 
+///
 /// Good examples:
 /// Custom encoded integers (i.e. varints)
 /// UTF8 strings
-/// 
+///
 /// Bad examples:
 /// GZIP encoded data
 /// Encrypted data
@@ -31,9 +33,10 @@ pub trait ForeignType {
         match type_ {
             PartialType::Type(t) => self.assignable_from(t),
             PartialType::Any => true,
-            PartialType::Scalar(PartialScalarType::Some(scalar)) |
-            PartialType::Scalar(PartialScalarType::Defaults(scalar))
-                => self.assignable_from(&Type::Scalar(*scalar)),
+            PartialType::Scalar(PartialScalarType::Some(scalar))
+            | PartialType::Scalar(PartialScalarType::Defaults(scalar)) => {
+                self.assignable_from(&Type::Scalar((*scalar).into()))
+            }
             _ => false,
         }
     }
@@ -43,9 +46,10 @@ pub trait ForeignType {
         match type_ {
             PartialType::Type(t) => self.assignable_to(t),
             PartialType::Any => true,
-            PartialType::Scalar(PartialScalarType::Some(scalar)) |
-            PartialType::Scalar(PartialScalarType::Defaults(scalar))
-                => self.assignable_to(&Type::Scalar(*scalar)),
+            PartialType::Scalar(PartialScalarType::Some(scalar))
+            | PartialType::Scalar(PartialScalarType::Defaults(scalar)) => {
+                self.assignable_to(&Type::Scalar((*scalar).into()))
+            }
             _ => false,
         }
     }
@@ -58,7 +62,7 @@ pub trait ForeignType {
      *   1. the expression should read its input from an implicit identifier `reader` as a `&mut R` where R: Read
      *   2. can read an arbitrary number of bytes from `reader`
      *   3. returns a value of the foreign type
-    */
+     */
     fn decoding_gen(
         &self,
         source: TokenStream,
@@ -71,7 +75,7 @@ pub trait ForeignType {
      * output code should be a single statement that:
      *  1. takes an expression `field_ref` as a reference to a value of the foreign type
      *  2. the statement should write its output to an implicit identifier `writer` as a `&mut W` where W: Write
-    */
+     */
     fn encoding_gen(
         &self,
         target: TokenStream,

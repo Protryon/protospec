@@ -9,7 +9,7 @@ pub enum EnumValue {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Enum {
-    pub rep: ScalarType,
+    pub rep: EndianScalarType,
     pub items: Vec<(Ident, EnumValue)>,
     pub span: Span,
 }

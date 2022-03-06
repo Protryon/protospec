@@ -23,7 +23,7 @@ pub enum Type {
     Container(Box<ContainerType>),
     Enum(EnumType),
     Bitfield(BitfieldType),
-    Scalar(ScalarType),
+    Scalar(EndianScalarType),
     Array(Box<ArrayType>),
     Foreign(Arc<ForeignType>),
     F32,
@@ -112,26 +112,26 @@ impl Type {
     pub fn can_coerce_to(&self, other: &Type) -> bool {
         match (self.resolved().as_ref(), other.resolved().as_ref()) {
             (Type::Enum(e1), Type::Scalar(scalar_type))
-                if e1.rep.can_implicit_cast_to(scalar_type) =>
+                if e1.rep.scalar.can_implicit_cast_to(&scalar_type.scalar) =>
             {
                 true
             }
             (Type::Bitfield(e1), Type::Scalar(scalar_type))
-                if e1.rep.can_implicit_cast_to(scalar_type) =>
+                if e1.rep.scalar.can_implicit_cast_to(&scalar_type.scalar) =>
             {
                 true
             }
             (Type::Scalar(scalar_type), Type::Enum(e1))
-                if scalar_type.can_implicit_cast_to(&e1.rep) =>
+                if scalar_type.scalar.can_implicit_cast_to(&e1.rep.scalar) =>
             {
                 true
             }
             (Type::Scalar(scalar_type), Type::Bitfield(e1))
-                if scalar_type.can_implicit_cast_to(&e1.rep) =>
+                if scalar_type.scalar.can_implicit_cast_to(&e1.rep.scalar) =>
             {
                 true
             }
-            (Type::Scalar(s1), Type::Scalar(s2)) => s1.can_implicit_cast_to(s2),
+            (Type::Scalar(s1), Type::Scalar(s2)) => s1.scalar.can_implicit_cast_to(&s2.scalar),
             (_, _) => false,
         }
     }

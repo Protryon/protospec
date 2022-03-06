@@ -1,8 +1,6 @@
 use proc_macro2::TokenStream;
 
-use crate::{FFIArgumentValue, asg::Type, FFIArgument};
-
-
+use crate::{asg::Type, FFIArgument, FFIArgumentValue};
 
 pub type ForeignFunctionObj = Box<dyn ForeignFunction + Send + Sync + 'static>;
 

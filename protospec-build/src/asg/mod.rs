@@ -1,4 +1,7 @@
-use crate::{ast, AsgError, AsgResult, BinaryOp, ScalarType, Span, UnaryOp, ForeignTypeObj, ForeignTransformObj, ForeignFunctionObj};
+use crate::{
+    ast, AsgError, AsgResult, BinaryOp, Endian, EndianScalarType, ForeignFunctionObj,
+    ForeignTransformObj, ForeignTypeObj, ScalarType, Span, UnaryOp,
+};
 use indexmap::{IndexMap, IndexSet};
 use proc_macro2::TokenStream;
 use std::fmt;

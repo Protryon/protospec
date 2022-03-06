@@ -1,7 +1,6 @@
 use super::*;
 
 impl Context {
-
     pub fn decode_field_top(&mut self, field: &Arc<Field>) {
         assert!(field.toplevel);
         self.name = field.name.clone();
@@ -29,17 +28,18 @@ impl Context {
             }
         }
         if let Some(value) = value.first() {
-            self.instructions.push(Instruction::Return(
-                *value,
-            ));    
+            self.instructions.push(Instruction::Return(*value));
         }
     }
 
     pub fn decode_field_condition(&mut self, field: &Arc<Field>) -> Option<usize> {
         if let Some(condition) = field.condition.borrow().as_ref() {
             let value = self.alloc_register();
-            self.instructions
-                .push(Instruction::Eval(value, condition.clone(), self.field_register_map.clone()));
+            self.instructions.push(Instruction::Eval(
+                value,
+                condition.clone(),
+                self.field_register_map.clone(),
+            ));
             Some(value)
         } else {
             None
@@ -50,7 +50,7 @@ impl Context {
     pub fn decode_field(&mut self, source: Target, field: &Arc<Field>) -> Vec<usize> {
         let field_condition = self.decode_field_condition(field);
         let start = self.instructions.len();
-        
+
         let emitted = self.decode_field_unconditional(source, field);
 
         if field.is_pad.get() {
@@ -71,14 +71,21 @@ impl Context {
         emitted
     }
 
-    pub fn decode_field_unconditional(&mut self, mut source: Target, field: &Arc<Field>) -> Vec<usize> {
+    pub fn decode_field_unconditional(
+        &mut self,
+        mut source: Target,
+        field: &Arc<Field>,
+    ) -> Vec<usize> {
         let mut new_streams = vec![];
 
         for transform in field.transforms.borrow().iter().rev() {
             let condition = if let Some(condition) = &transform.condition {
                 let value = self.alloc_register();
-                self.instructions
-                    .push(Instruction::Eval(value, condition.clone(), self.field_register_map.clone()));
+                self.instructions.push(Instruction::Eval(
+                    value,
+                    condition.clone(),
+                    self.field_register_map.clone(),
+                ));
                 Some(value)
             } else {
                 None
@@ -88,7 +95,11 @@ impl Context {
             let mut args = vec![];
             for arg in transform.arguments.iter() {
                 let r = self.alloc_register();
-                self.instructions.push(Instruction::Eval(r, arg.clone(), self.field_register_map.clone()));
+                self.instructions.push(Instruction::Eval(
+                    r,
+                    arg.clone(),
+                    self.field_register_map.clone(),
+                ));
                 args.push(r);
             }
             let new_stream = self.alloc_register();

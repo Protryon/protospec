@@ -6,7 +6,6 @@ pub struct ArrayType {
     pub length: LengthConstraint,
 }
 
-
 #[derive(PartialEq, Clone, Debug)]
 pub struct LengthConstraint {
     pub expandable: bool,

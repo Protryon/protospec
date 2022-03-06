@@ -1,7 +1,6 @@
 use super::*;
 
 impl Context {
-
     pub fn encode_field_top(&mut self, field: &Arc<Field>) {
         let top = self.alloc_register(); // implicitly set to self/equivalent
         match &*field.type_.borrow() {
@@ -15,9 +14,8 @@ impl Context {
                     ops.push(FieldRef::Ref);
                 }
                 ops.push(FieldRef::TupleAccess(0));
-    
-                self.instructions
-                    .push(Instruction::GetField(0, 0, ops))
+
+                self.instructions.push(Instruction::GetField(0, 0, ops))
             }
         }
         self.encode_field(Target::Direct, top, field, false);
@@ -43,8 +41,14 @@ impl Context {
     ) {
         let field_condition = self.encode_field_condition(field);
         let start = self.instructions.len();
-        
-        self.encode_field_unconditional(target, source, field, field_condition.is_some(), field_condition.is_some() || conditional);
+
+        self.encode_field_unconditional(
+            target,
+            source,
+            field,
+            field_condition.is_some(),
+            field_condition.is_some() || conditional,
+        );
 
         if let Some(field_condition) = field_condition {
             let drained = self.instructions.drain(start..).collect();
@@ -52,7 +56,6 @@ impl Context {
                 .push(Instruction::Conditional(field_condition, drained, vec![]));
         }
     }
-
 
     pub fn encode_field_unconditional(
         &mut self,
@@ -107,9 +110,14 @@ impl Context {
             target = Target::Stream(new_stream);
         }
 
-        let is_psuedocontainer = !field.toplevel && matches!(&*field.type_.borrow(), Type::Container(_));
+        let is_psuedocontainer =
+            !field.toplevel && matches!(&*field.type_.borrow(), Type::Container(_));
 
-        let source = if self_conditional && !is_psuedocontainer && !field.calculated.borrow().is_some() && !field.is_pad.get() {
+        let source = if self_conditional
+            && !is_psuedocontainer
+            && !field.calculated.borrow().is_some()
+            && !field.is_pad.get()
+        {
             let real_source = self.alloc_register();
             self.instructions.push(Instruction::NullCheck(
                 source,
@@ -131,9 +139,11 @@ impl Context {
                 };
                 let len = array_type.length.value.as_ref().cloned().unwrap();
                 let length_register = self.alloc_register();
-                self.instructions.push(Instruction::Eval(length_register, len));
-                self.instructions.push(Instruction::Pad(target, length_register));
-            },
+                self.instructions
+                    .push(Instruction::Eval(length_register, len));
+                self.instructions
+                    .push(Instruction::Pad(target, length_register));
+            }
             type_ => self.encode_complex_type(field, type_, target, source, total_conditional),
         }
 

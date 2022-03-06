@@ -6,7 +6,7 @@ impl ForeignType for Utf8 {
     fn assignable_from(&self, type_: &Type) -> bool {
         match type_ {
             Type::Array(inner) => {
-                Type::Scalar(ScalarType::U8).assignable_from(&*inner.element)
+                Type::Scalar(ScalarType::U8.into()).assignable_from(&*inner.element)
             }
             _ => false,
         }
@@ -85,7 +85,7 @@ impl ForeignType for Utf8 {
     fn arguments(&self) -> Vec<TypeArgument> {
         vec![TypeArgument {
             name: "length".to_string(),
-            type_: Type::Scalar(ScalarType::U64),
+            type_: Type::Scalar(ScalarType::U64.into()),
             default_value: Some(u64::MAX.into()),
             can_resolve_auto: true,
         }]

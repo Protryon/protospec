@@ -30,7 +30,7 @@ pub enum RawType {
     Container(Container),
     Enum(Enum),
     Bitfield(Bitfield),
-    Scalar(ScalarType),
+    Scalar(EndianScalarType),
     Array(Array),
     F32,
     F64,
@@ -40,6 +40,9 @@ pub enum RawType {
 
 impl RawType {
     pub fn is_inlinable(&self) -> bool {
-        !matches!(self, RawType::Container(_) | RawType::Enum(_) | RawType::Bitfield(_))
+        !matches!(
+            self,
+            RawType::Container(_) | RawType::Enum(_) | RawType::Bitfield(_)
+        )
     }
 }

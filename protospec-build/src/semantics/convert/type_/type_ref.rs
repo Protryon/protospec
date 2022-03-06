@@ -19,9 +19,7 @@ impl Scope {
             {
                 return Err(AsgError::InvalidTypeArgumentOrder(type_.span));
             }
-            if type_.arguments.len() < min_arg_count
-                || type_.arguments.len() > target_args.len()
-            {
+            if type_.arguments.len() < min_arg_count || type_.arguments.len() > target_args.len() {
                 return Err(AsgError::InvalidTypeArgumentCount(
                     min_arg_count,
                     target_args.len(),

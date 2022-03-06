@@ -13,8 +13,7 @@ impl Scope {
         let normalized = resolver.normalize_import(content.as_ref())?;
         if let Some(cached) = import_cache.get(&normalized) {
             for import_item in import.items.iter() {
-                let imported_name = if let Some(alias) = import_item.alias.as_ref()
-                {
+                let imported_name = if let Some(alias) = import_item.alias.as_ref() {
                     alias.name.clone()
                 } else {
                     import_item.name.name.clone()
@@ -23,9 +22,7 @@ impl Scope {
                     program.borrow_mut().types.insert(imported_name, t.clone());
                 } else if let Some(t) = cached.consts.get(&import_item.name.name) {
                     program.borrow_mut().consts.insert(imported_name, t.clone());
-                } else if let Some(t) =
-                    cached.transforms.get(&import_item.name.name)
-                {
+                } else if let Some(t) = cached.transforms.get(&import_item.name.name) {
                     program
                         .borrow_mut()
                         .transforms

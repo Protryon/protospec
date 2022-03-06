@@ -1,6 +1,12 @@
 use super::*;
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Copy, Debug)]
+pub enum Endian {
+    Big,
+    Little,
+}
+
+#[derive(Clone, Serialize, Deserialize, PartialEq, Copy, Debug)]
 pub enum ScalarType {
     U8,
     U16,
@@ -12,6 +18,18 @@ pub enum ScalarType {
     I32,
     I64,
     I128,
+}
+
+#[derive(Clone, Serialize, Deserialize, PartialEq, Copy, Debug)]
+pub struct EndianScalarType {
+    pub scalar: ScalarType,
+    pub endian: Endian,
+}
+
+impl EndianScalarType {
+    pub fn is_little_endian(&self) -> bool {
+        matches!(self.endian, Endian::Little)
+    }
 }
 
 impl ScalarType {
@@ -66,5 +84,40 @@ impl fmt::Display for ScalarType {
                 I128 => "i128",
             }
         )
+    }
+}
+
+impl fmt::Display for Endian {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use Endian::*;
+        write!(
+            f,
+            "{}",
+            match self {
+                Big => "",
+                Little => "le",
+            }
+        )
+    }
+}
+
+impl fmt::Display for EndianScalarType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}{}", self.scalar, self.endian)
+    }
+}
+
+impl Into<EndianScalarType> for ScalarType {
+    fn into(self) -> EndianScalarType {
+        EndianScalarType {
+            scalar: self,
+            endian: Endian::Big,
+        }
+    }
+}
+
+impl Into<ScalarType> for EndianScalarType {
+    fn into(self) -> ScalarType {
+        self.scalar
     }
 }

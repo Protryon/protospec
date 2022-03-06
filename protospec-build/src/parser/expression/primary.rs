@@ -5,7 +5,7 @@ pub fn parse_primary_expression(t: &mut TokenIter) -> ParseResult<Expression> {
     Ok(match token {
         Token::Int(value) => Expression::Int(Int {
             value,
-            type_: parse_scalar_type(t),
+            type_: parse_scalar_type(t).map(|x| x.scalar),
             span,
         }),
         Token::String(content) => Expression::Str(Str { content, span }),

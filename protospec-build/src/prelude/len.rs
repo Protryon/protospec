@@ -7,13 +7,13 @@ impl LenFunction {
         match &type_ {
             Type::Container(_) => panic!("cannot call len on container"),
             Type::Enum(e) => {
-                let size = e.rep.size();
+                let size = e.rep.scalar.size();
                 quote! {
                     #size
                 }
             }
             Type::Bitfield(e) => {
-                let size = e.rep.size();
+                let size = e.rep.scalar.size();
                 quote! {
                     #size
                 }
@@ -22,7 +22,7 @@ impl LenFunction {
             Type::F64 => quote! { 8u64 },
             Type::Bool => quote! { 1u64 },
             Type::Scalar(s) => {
-                let size = s.size();
+                let size = s.scalar.size();
                 quote! {
                     #size
                 }
@@ -47,7 +47,7 @@ impl ForeignFunction for LenFunction {
     }
 
     fn return_type(&self) -> Type {
-        Type::Scalar(ScalarType::U64)
+        Type::Scalar(ScalarType::U64.into())
     }
 
     fn call(&self, arguments: &[FFIArgumentValue]) -> TokenStream {

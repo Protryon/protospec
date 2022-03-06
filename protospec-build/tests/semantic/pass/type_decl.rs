@@ -23,6 +23,18 @@ fn test_container() {
 }
 
 #[test]
+fn test_container_le() {
+    load_asg(
+        r#"
+    type test = container {
+        west: u32le,
+    };
+    "#,
+    )
+    .unwrap();
+}
+
+#[test]
 fn test_nested_container() {
     load_asg(
         r#"
@@ -142,10 +154,9 @@ fn test_bool() {
     .unwrap();
 }
 
-
 #[test]
 fn test_bitfield() {
-    parse(
+    load_asg(
         r#"
     type test = bitfield i32 {
         test = 1,
@@ -194,7 +205,7 @@ fn test_enum_array() {
 
 #[test]
 fn test_enum_default() {
-    parse(
+    load_asg(
         r#"
     type test = enum i32 {
         test = 1,

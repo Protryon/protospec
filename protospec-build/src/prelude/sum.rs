@@ -4,17 +4,15 @@ pub struct SumFunction;
 
 impl ForeignFunction for SumFunction {
     fn arguments(&self) -> Vec<FFIArgument> {
-        vec![
-            FFIArgument {
-                name: "input".to_string(),
-                type_: None,
-                optional: false,
-            },
-        ]
+        vec![FFIArgument {
+            name: "input".to_string(),
+            type_: None,
+            optional: false,
+        }]
     }
 
     fn return_type(&self) -> Type {
-        Type::Scalar(ScalarType::U64)
+        Type::Scalar(ScalarType::U64.into())
     }
 
     fn call(&self, arguments: &[FFIArgumentValue]) -> TokenStream {

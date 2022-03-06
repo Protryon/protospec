@@ -65,4 +65,3 @@ fn test_compiler_calculated_blen() {
 
     compile("calculated_blen", &compile_test_program(&asg, test));
 }
-

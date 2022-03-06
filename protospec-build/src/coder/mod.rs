@@ -1,7 +1,9 @@
+use std::fmt;
+
 use proc_macro2::TokenStream;
 use quote::{ToTokens, TokenStreamExt};
 
-use crate::ScalarType;
+use crate::{EndianScalarType, ScalarType};
 
 #[derive(Debug)]
 pub enum FieldRef {
@@ -32,7 +34,18 @@ pub enum PrimitiveType {
     Bool,
     F32,
     F64,
-    Scalar(ScalarType),
+    Scalar(EndianScalarType),
+}
+
+impl fmt::Display for PrimitiveType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PrimitiveType::Bool => write!(f, "bool"),
+            PrimitiveType::F32 => write!(f, "f32"),
+            PrimitiveType::F64 => write!(f, "f64"),
+            PrimitiveType::Scalar(s) => write!(f, "{}", s),
+        }
+    }
 }
 
 impl PrimitiveType {
@@ -41,18 +54,7 @@ impl PrimitiveType {
             PrimitiveType::Bool => 1,
             PrimitiveType::F32 => 4,
             PrimitiveType::F64 => 8,
-            PrimitiveType::Scalar(s) => s.size(),
-        }
-    }
-}
-
-impl ToString for PrimitiveType {
-    fn to_string(&self) -> String {
-        match self {
-            PrimitiveType::Bool => "bool".to_string(),
-            PrimitiveType::F32 => "f32".to_string(),
-            PrimitiveType::F64 => "f64".to_string(),
-            PrimitiveType::Scalar(s) => s.to_string(),
+            PrimitiveType::Scalar(s) => s.scalar.size(),
         }
     }
 }
@@ -63,7 +65,7 @@ impl ToTokens for PrimitiveType {
             PrimitiveType::Bool => tokens.append(format_ident!("bool")),
             PrimitiveType::F32 => tokens.append(format_ident!("f32")),
             PrimitiveType::F64 => tokens.append(format_ident!("f64")),
-            PrimitiveType::Scalar(s) => tokens.append(format_ident!("{}", &s.to_string())),
+            PrimitiveType::Scalar(s) => tokens.append(format_ident!("{}", &s.scalar.to_string())),
         }
     }
 }

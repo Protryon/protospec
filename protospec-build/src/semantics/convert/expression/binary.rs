@@ -17,7 +17,7 @@ impl Scope {
                     ));
                 }
             }
-            _ => ()
+            _ => (),
         }
         let init_expected_type = match expr.op {
             Lt | Gt | Lte | Gte => PartialType::Scalar(PartialScalarType::None),
@@ -26,21 +26,20 @@ impl Scope {
             _ => expected_type.clone(),
         };
         let mut left = Scope::convert_expr(self_, &expr.left, init_expected_type.clone());
-        let right =
-            if let Some(left_type) = left.as_ref().map(|x| x.get_type()).ok().flatten() {
-                Scope::convert_expr(self_, &expr.right, left_type.into())?
-            } else {
-                let right = Scope::convert_expr(self_, &expr.right, init_expected_type)?;
-                if let Some(right_type) = right.get_type() {
-                    left = Ok(Scope::convert_expr(self_, &expr.left, right_type.into())?);
-                    if left.as_ref().unwrap().get_type().is_none() {
-                        return Err(AsgError::UninferredType(*expr.left.span()));
-                    }
-                } else {
-                    return Err(AsgError::UninferredType(expr.span));
+        let right = if let Some(left_type) = left.as_ref().map(|x| x.get_type()).ok().flatten() {
+            Scope::convert_expr(self_, &expr.right, left_type.into())?
+        } else {
+            let right = Scope::convert_expr(self_, &expr.right, init_expected_type)?;
+            if let Some(right_type) = right.get_type() {
+                left = Ok(Scope::convert_expr(self_, &expr.left, right_type.into())?);
+                if left.as_ref().unwrap().get_type().is_none() {
+                    return Err(AsgError::UninferredType(*expr.left.span()));
                 }
-                right
-            };
+            } else {
+                return Err(AsgError::UninferredType(expr.span));
+            }
+            right
+        };
         Ok(BinaryExpression {
             op: expr.op.clone(),
             left: Box::new(left.unwrap()),

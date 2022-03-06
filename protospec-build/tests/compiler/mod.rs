@@ -5,16 +5,16 @@ use quote::quote;
 use std::io::Write;
 use std::process::Command;
 
+mod bitfield;
+mod calculated;
 mod container;
 mod enum_;
-mod bitfield;
-mod primitive;
-mod transform;
-mod foreign_type;
 mod expr;
-mod tagged_enum;
-mod calculated;
+mod foreign_type;
 mod integration;
+mod primitive;
+mod tagged_enum;
+mod transform;
 
 pub fn rustfmt(input: &str) -> String {
     let mut proc = Command::new("rustfmt")

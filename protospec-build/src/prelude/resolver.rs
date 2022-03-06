@@ -46,8 +46,14 @@ impl<T: ImportResolver + 'static> ImportResolver for PreludeImportResolver<T> {
 
     fn prelude_ffi_functions(&self) -> Result<HashMap<String, ForeignFunctionObj>> {
         let mut out = HashMap::new();
-        out.insert("len".to_string(), self.resolve_ffi_function("len")?.unwrap());
-        out.insert("blen".to_string(), self.resolve_ffi_function("blen")?.unwrap());
+        out.insert(
+            "len".to_string(),
+            self.resolve_ffi_function("len")?.unwrap(),
+        );
+        out.insert(
+            "blen".to_string(),
+            self.resolve_ffi_function("blen")?.unwrap(),
+        );
         Ok(out)
     }
 }

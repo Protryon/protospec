@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use super::*;
 use crate::coder::encode::*;
-use crate::{coder::*, map_async, ScalarType};
+use crate::{coder::*, map_async, Endian, EndianScalarType, ScalarType};
 
 fn emit_target(target: &Target) -> TokenStream {
     match target {
@@ -34,14 +34,17 @@ impl EncoderContext {
                 })
             }
         }
-        
+
         for instruction in instructions.iter() {
             // println!("encoding {}", instruction);
             match instruction {
                 Instruction::Eval(target, expr) => {
                     let target = emit_register(*target);
                     let value = emit_expression(expr, &|f: &Arc<Field>| {
-                        let register = self.resolved_refs.get(&*f.name).expect("failed to dereference");
+                        let register = self
+                            .resolved_refs
+                            .get(&*f.name)
+                            .expect("failed to dereference");
                         emit_register(*register)
                     });
                     statements.push(quote! {
@@ -120,7 +123,7 @@ impl EncoderContext {
                     } else {
                         quote! { & }
                     };
-    
+
                     statements.push(quote! {
                         let #destination = if let Some(#destination) = #ref_token#target {
                             #destination
@@ -164,12 +167,13 @@ impl EncoderContext {
                         let value = emit_register(*argument);
                         out_arguments.push(value);
                     }
-    
-                    statements.push(
-                        type_ref
-                            .obj
-                            .encoding_gen(target, data, out_arguments, self.is_async),
-                    );
+
+                    statements.push(type_ref.obj.encoding_gen(
+                        target,
+                        data,
+                        out_arguments,
+                        self.is_async,
+                    ));
                 }
                 Instruction::EndStream(stream) => {
                     let stream = emit_register(*stream);
@@ -204,18 +208,28 @@ impl EncoderContext {
                         });
                     }
                 }
-                Instruction::EncodeEnum(target, value) => {
+                Instruction::EncodeEnum(target, value, type_) => {
                     let target = emit_target(target);
                     let value = emit_register(*value);
+                    let encoder = if type_.is_little_endian() {
+                        quote! { to_le_bytes }
+                    } else {
+                        quote! { to_be_bytes }
+                    };
                     statements.push(quote! {
-                        #target.write_all(&((#value).to_repr()).to_be_bytes()[..])#async_?;
+                        #target.write_all(&((#value).to_repr()).#encoder()[..])#async_?;
                     });
                 }
-                Instruction::EncodeBitfield(target, value) => {
+                Instruction::EncodeBitfield(target, value, type_) => {
                     let target = emit_target(target);
                     let value = emit_register(*value);
+                    let encoder = if type_.is_little_endian() {
+                        quote! { to_le_bytes }
+                    } else {
+                        quote! { to_be_bytes }
+                    };
                     statements.push(quote! {
-                        #target.write_all(&(#value.0).to_be_bytes()[..])#async_?;
+                        #target.write_all(&(#value.0).#encoder()[..])#async_?;
                     });
                 }
                 Instruction::EncodePrimitive(target, data, PrimitiveType::Bool) => {
@@ -223,6 +237,20 @@ impl EncoderContext {
                     let data = emit_register(*data);
                     statements.push(quote! {
                         #target.write_all(&[if #data { 1u8 } else { 0u8 }])#async_?;
+                    });
+                }
+                Instruction::EncodePrimitive(
+                    target,
+                    data,
+                    PrimitiveType::Scalar(EndianScalarType {
+                        endian: Endian::Little,
+                        ..
+                    }),
+                ) => {
+                    let target = emit_target(target);
+                    let data = emit_register(*data);
+                    statements.push(quote! {
+                        #target.write_all(&#data.to_le_bytes()[..])#async_?;
                     });
                 }
                 Instruction::EncodePrimitive(target, data, _) => {
@@ -242,19 +270,32 @@ impl EncoderContext {
                                     #target.write_all(&[if x { 1u8 } else { 0u8 }])#async_?;
                                 }
                             }
-                        },
-                        Type::Scalar(ScalarType::U8) => {
+                        }
+                        Type::Scalar(EndianScalarType {
+                            scalar: ScalarType::U8,
+                            ..
+                        }) => {
                             quote! {
                                 #target.write_all(&#data[..])#async_?;
                             }
-                        },
+                        }
+                        Type::Scalar(EndianScalarType {
+                            endian: Endian::Little,
+                            ..
+                        }) => {
+                            quote! {
+                                for x in #data.iter() {
+                                    #target.write_all(&x.to_le_bytes()[..])#async_?;
+                                }
+                            }
+                        }
                         _ => {
                             quote! {
                                 for x in #data.iter() {
                                     #target.write_all(&x.to_be_bytes()[..])#async_?;
                                 }
                             }
-                        },
+                        }
                     };
                     if let Some(len) = len {
                         let len = emit_register(*len);
@@ -290,15 +331,18 @@ impl EncoderContext {
                     let owned_new_stream = emit_register(*owned_new_stream);
                     let args = args.iter().map(|x| emit_register(*x)).collect::<Vec<_>>();
                     let input = emit_target(stream);
-                    let transformed = transformer.inner.encoding_gen(input.clone(), args, self.is_async);
+                    let transformed =
+                        transformer
+                            .inner
+                            .encoding_gen(input.clone(), args, self.is_async);
                     let prelude = self.prepare_encode(&prelude[..], false);
-        
+
                     let trait_name = if self.is_async {
                         quote! { dyn AsyncWrite + Send + Sync + Unpin }
                     } else {
                         quote! { dyn Write }
                     };
-    
+
                     //todo: would be nicer to use generics here instead of trait object
                     statements.push(quote! {
                         let mut #owned_new_stream = None;
@@ -316,7 +360,7 @@ impl EncoderContext {
                     let discriminant = emit_ident(discriminant);
                     let original = emit_register(*original);
                     let checked = emit_register(*checked);
-    
+
                     statements.push(quote! {
                         let #checked = if let #enum_name::#discriminant(#checked) = &#original {
                             #checked
@@ -324,8 +368,14 @@ impl EncoderContext {
                             return Err(encode_error(#message).into())
                         };
                     });
-                },
-                Instruction::UnwrapEnumStruct(enum_name, discriminant, original, checked, message) => {
+                }
+                Instruction::UnwrapEnumStruct(
+                    enum_name,
+                    discriminant,
+                    original,
+                    checked,
+                    message,
+                ) => {
                     let enum_name = emit_ident(enum_name);
                     let discriminant = emit_ident(discriminant);
                     let original = emit_register(*original);
@@ -340,12 +390,12 @@ impl EncoderContext {
                         let copy = if *do_copy {
                             quote! { * }
                         } else {
-                            quote! { }
+                            quote! {}
                         };
                         checked_reg_match = quote! { #checked, #checked_reg_match };
                         checked_reg_list = quote! { #copy#checked, #checked_reg_list };
                     }
-    
+
                     statements.push(quote! {
                         let (#checked_reg_match) = if let #enum_name::#discriminant { #checked_name_list } = &#original {
                             (#checked_reg_list)
@@ -353,7 +403,7 @@ impl EncoderContext {
                             return Err(encode_error(#message).into())
                         };
                     });
-                },
+                }
                 Instruction::BreakBlock(instructions) => {
                     //todo: support nested breakblocks?
                     let interior = self.prepare_encode(&instructions[..], false);
@@ -363,12 +413,12 @@ impl EncoderContext {
                             break 'bb;
                         }
                     });
-                }, 
+                }
                 Instruction::Break => {
                     statements.push(quote! {
                         break 'bb;
                     });
-                },
+                }
                 Instruction::Pad(target, length) => {
                     let length = emit_register(*length);
                     let target = emit_target(target);
@@ -376,26 +426,26 @@ impl EncoderContext {
                     statements.push(quote! {
                         #target.write_all(&vec![0u8; #length as usize][..])#async_?;
                     });
-                },
+                }
                 Instruction::SetRef(name, value) => {
                     self.resolved_refs.insert(name.clone(), *value);
-                },
+                }
                 Instruction::GetRef(target, name) => {
                     let target = emit_register(*target);
-                    let value = emit_register(*self.resolved_refs.get(name).expect("unresolved ref"));
+                    let value =
+                        emit_register(*self.resolved_refs.get(name).expect("unresolved ref"));
                     statements.push(quote! {
                         let #target = #value;
                     });
-                },
+                }
             }
         }
-    
+
         let statements = flatten(statements);
         quote! {
             #statements
         }
     }
-    
 }
 
 pub fn prepare_encoder(coder: &Context, is_async: bool) -> TokenStream {

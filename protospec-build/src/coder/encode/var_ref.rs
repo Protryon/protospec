@@ -21,7 +21,7 @@ impl Context {
                 let r = self.alloc_register();
                 self.instructions.push(Instruction::Eval(r, arg.clone()));
                 args.push(r);
-            }    
+            }
             self.instructions
                 .push(Instruction::EncodeRef(target, source, args));
         }

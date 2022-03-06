@@ -61,12 +61,15 @@ impl AsgExpression for Expression {
             Cast(e) => e.get_type(),
             ArrayIndex(e) => e.get_type(),
             EnumAccess(e) => e.get_type(),
-            Int(e) => Some(Type::Scalar(e.type_)),
+            Int(e) => Some(Type::Scalar(EndianScalarType {
+                scalar: e.type_,
+                endian: Endian::Big,
+            })),
             ConstRef(e) => e.get_type(),
             InputRef(e) => e.get_type(),
             FieldRef(e) => e.get_type(),
             Str(e) => Some(Type::Array(Box::new(ArrayType {
-                element: Box::new(Type::Scalar(ScalarType::U8)),
+                element: Box::new(Type::Scalar(ScalarType::U8.into())),
                 length: LengthConstraint {
                     expandable: true,
                     value: Some(Expression::Int(self::Int {

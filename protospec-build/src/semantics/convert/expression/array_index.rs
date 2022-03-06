@@ -15,7 +15,7 @@ impl Scope {
             index: Box::new(Scope::convert_expr(
                 self_,
                 &expr.index,
-                Type::Scalar(ScalarType::U64).into(),
+                Type::Scalar(ScalarType::U64.into()).into(),
             )?),
             span: expr.span,
         })

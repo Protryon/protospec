@@ -1,11 +1,13 @@
-use std::{collections::{HashSet, HashMap}, cell::{Cell, RefCell}};
+use std::{
+    cell::{Cell, RefCell},
+    collections::{HashMap, HashSet},
+};
 
 use crate::Span;
 
 use super::*;
 
 impl Context {
-
     fn encode_container_refs(&mut self, container: &ContainerType, source: usize) {
         for (name, field) in container.flatten_view() {
             if field.calculated.borrow().is_some() || field.is_pad.get() {
@@ -18,7 +20,8 @@ impl Context {
                 ops.push(FieldRef::Ref);
             }
             ops.push(FieldRef::Name(name.clone()));
-            self.instructions.push(Instruction::GetField(target, source, ops));
+            self.instructions
+                .push(Instruction::GetField(target, source, ops));
             self.instructions.push(Instruction::SetRef(name, target));
         }
     }
@@ -28,15 +31,26 @@ impl Context {
             return;
         }
         for (name, field) in &container.items {
-            if field.calculated.borrow().is_some() || field.is_pad.get() || matches!(&*field.type_.borrow(), Type::Container(_)) {
+            if field.calculated.borrow().is_some()
+                || field.is_pad.get()
+                || matches!(&*field.type_.borrow(), Type::Container(_))
+            {
                 continue;
             }
             let is_interior_conditional = field.condition.borrow().is_some();
             if !is_interior_conditional {
                 let target = self.alloc_register();
-                self.instructions.push(Instruction::GetRef(target, name.clone()));
-                self.instructions.push(Instruction::NullCheck(target, target, true, "field in optional interior container is None when condition is met".to_string()));
-                self.instructions.push(Instruction::SetRef(name.clone(), target));
+                self.instructions
+                    .push(Instruction::GetRef(target, name.clone()));
+                self.instructions.push(Instruction::NullCheck(
+                    target,
+                    target,
+                    true,
+                    "field in optional interior container is None when condition is met"
+                        .to_string(),
+                ));
+                self.instructions
+                    .push(Instruction::SetRef(name.clone(), target));
             }
         }
     }
@@ -49,30 +63,46 @@ impl Context {
                     continue;
                 }
                 let calculated_register = self.alloc_register();
-                self.instructions.push(Instruction::Eval(calculated_register, calculated.clone()));
-                self.instructions.push(Instruction::SetRef(name, calculated_register));
+                self.instructions
+                    .push(Instruction::Eval(calculated_register, calculated.clone()));
+                self.instructions
+                    .push(Instruction::SetRef(name, calculated_register));
             }
         }
     }
 
-    fn eval_blen_expr(&mut self, blens: &[String], field: &Arc<Field>, calculated: &Expression) -> usize {
+    fn eval_blen_expr(
+        &mut self,
+        blens: &[String],
+        field: &Arc<Field>,
+        calculated: &Expression,
+    ) -> usize {
         let mut blen_map = HashMap::new();
         for target_name in blens {
             let register = *self.resolved_autos.get(target_name).unwrap();
             let blen_name = format!("__blen_{}", target_name);
             blen_map.insert(target_name.clone(), blen_name.clone());
-            self.instructions.push(Instruction::SetRef(blen_name, register));
+            self.instructions
+                .push(Instruction::SetRef(blen_name, register));
         }
         let mut calculated = calculated.clone();
         calculated.rewrite_blen_calls(&blen_map);
 
         let calculated_register = self.alloc_register();
-        self.instructions.push(Instruction::Eval(calculated_register, calculated));
-        self.instructions.push(Instruction::SetRef(field.name.clone(), calculated_register));
+        self.instructions
+            .push(Instruction::Eval(calculated_register, calculated));
+        self.instructions
+            .push(Instruction::SetRef(field.name.clone(), calculated_register));
         calculated_register
     }
 
-    fn encode_container_items(&mut self, container: &ContainerType, buf_target: Target, source: usize, conditional: bool) {
+    fn encode_container_items(
+        &mut self,
+        container: &ContainerType,
+        buf_target: Target,
+        source: usize,
+        conditional: bool,
+    ) {
         let mut auto_targets = vec![];
         for (name, child) in container.items.iter() {
             let calculated = child.calculated.borrow();
@@ -104,21 +134,31 @@ impl Context {
                 self.encode_field(real_target, source, child, conditional);
             } else {
                 let resolved = self.alloc_register();
-                self.instructions.push(Instruction::GetRef(resolved, name.clone()));
+                self.instructions
+                    .push(Instruction::GetRef(resolved, name.clone()));
                 self.encode_field(real_target, resolved, child, conditional);
             }
 
-            for (i, (auto_target, auto_field)) in auto_targets.clone().into_iter().enumerate().rev() {
+            for (i, (auto_target, auto_field)) in auto_targets.clone().into_iter().enumerate().rev()
+            {
                 let calculated = auto_field.calculated.borrow();
                 let calculated = calculated.as_ref().unwrap();
                 let blen_calls = calculated.blen_calls();
-                if blen_calls.iter().all(|x| self.resolved_autos.get(x).is_some()) {
-                    let calculated_register = self.eval_blen_expr(&blen_calls[..], auto_field, calculated);
+                if blen_calls
+                    .iter()
+                    .all(|x| self.resolved_autos.get(x).is_some())
+                {
+                    let calculated_register =
+                        self.eval_blen_expr(&blen_calls[..], auto_field, calculated);
 
                     auto_targets.remove(i);
-                    let target = auto_targets.get(i).map(|(target, _)| Target::Buf(*target)).unwrap_or(buf_target);
+                    let target = auto_targets
+                        .get(i)
+                        .map(|(target, _)| Target::Buf(*target))
+                        .unwrap_or(buf_target);
                     self.encode_field(target, calculated_register, auto_field, conditional);
-                    self.instructions.push(Instruction::EmitBuf(target, auto_target));
+                    self.instructions
+                        .push(Instruction::EmitBuf(target, auto_target));
                 }
             }
         }
@@ -127,7 +167,14 @@ impl Context {
         }
     }
 
-    pub fn encode_container(&mut self, field: &Arc<Field>, type_: &ContainerType, target: Target, source: usize, conditional: bool) {
+    pub fn encode_container(
+        &mut self,
+        field: &Arc<Field>,
+        type_: &ContainerType,
+        target: Target,
+        source: usize,
+        conditional: bool,
+    ) {
         let buf_target = if let Some(length) = &type_.length {
             //todo: use limited stream
             let buf = self.alloc_register();
@@ -157,14 +204,16 @@ impl Context {
                     Type::Container(type_) => {
                         let mut unwrapped = vec![];
                         for (subname, subchild) in type_.flatten_view() {
-                            if subchild.is_pad.get() || matches!(&*subchild.type_.borrow(), Type::Container(_)) {
+                            if subchild.is_pad.get()
+                                || matches!(&*subchild.type_.borrow(), Type::Container(_))
+                            {
                                 continue;
                             }
                             let alloced = self.alloc_register();
                             unwrapped.push((
                                 subname.clone(),
                                 alloced,
-                                subchild.type_.borrow().copyable()
+                                subchild.type_.borrow().copyable(),
                             ));
                         }
 
@@ -182,7 +231,7 @@ impl Context {
                         self.encode_container_calculated(type_);
                         self.encode_container_items(type_, buf_target, source, false);
                         self.instructions.push(Instruction::Break);
-                    },
+                    }
                     _ => {
                         self.instructions.push(Instruction::UnwrapEnum(
                             field.name.clone(),
@@ -191,10 +240,10 @@ impl Context {
                             unwrapped,
                             "mismatch betweeen condition and enum discriminant".to_string(),
                         ));
-                        
+
                         self.encode_field_unconditional(buf_target, unwrapped, child, false, false);
                         self.instructions.push(Instruction::Break);
-                    },
+                    }
                 }
 
                 if let Some(condition) = condition {
@@ -205,11 +254,10 @@ impl Context {
             }
             let drained = self.instructions.drain(break_start..).collect();
             self.instructions.push(Instruction::BreakBlock(drained));
-
         } else {
             if field.toplevel {
                 self.encode_container_refs(type_, source);
-                self.encode_container_calculated(type_);    
+                self.encode_container_calculated(type_);
             } else {
                 self.nullcheck_container_refs(type_, conditional);
             }
@@ -219,14 +267,17 @@ impl Context {
         if type_.length.is_some() {
             if self.pending_autos.remove(&field.name) {
                 let target = self.alloc_register();
-                self.instructions.push(Instruction::GetLen(target, buf_target.unwrap_buf(), Some(ScalarType::U64)));
+                self.instructions.push(Instruction::GetLen(
+                    target,
+                    buf_target.unwrap_buf(),
+                    Some(ScalarType::U64),
+                ));
                 self.resolved_autos.insert(field.name.clone(), target);
             }
             self.instructions
                 .push(Instruction::EmitBuf(target, buf_target.unwrap_buf()));
         }
     }
-
 }
 
 impl Expression {
@@ -235,22 +286,22 @@ impl Expression {
             Expression::Binary(expr) => {
                 expr.left.rewrite_blen_calls(map);
                 expr.right.rewrite_blen_calls(map);
-            },
+            }
             Expression::Unary(expr) => {
                 expr.inner.rewrite_blen_calls(map);
-            },
+            }
             Expression::Cast(expr) => {
                 expr.inner.rewrite_blen_calls(map);
-            },
+            }
             Expression::ArrayIndex(expr) => {
                 expr.array.rewrite_blen_calls(map);
                 expr.index.rewrite_blen_calls(map);
-            },
+            }
             Expression::Ternary(expr) => {
                 expr.condition.rewrite_blen_calls(map);
                 expr.if_true.rewrite_blen_calls(map);
                 expr.if_false.rewrite_blen_calls(map);
-            },
+            }
             Expression::EnumAccess(_) => (),
             Expression::Int(_) => (),
             Expression::ConstRef(_) => (),
@@ -273,7 +324,7 @@ impl Expression {
                         name: new_name.clone(),
                         arguments: RefCell::new(vec![]),
                         span: Span::default(),
-                        type_: RefCell::new(Type::Scalar(ScalarType::U64)),
+                        type_: RefCell::new(Type::Scalar(ScalarType::U64.into())),
                         calculated: RefCell::new(None),
                         condition: RefCell::new(None),
                         transforms: RefCell::new(vec![]),
@@ -282,10 +333,10 @@ impl Expression {
                         is_pad: Cell::new(false),
                     }));
                 }
-            },
+            }
             Expression::Member(expr) => {
                 expr.target.rewrite_blen_calls(map);
-            },
+            }
         }
     }
 
@@ -300,22 +351,22 @@ impl Expression {
             Expression::Binary(expr) => {
                 expr.left.extract_magic_blen_calls(output);
                 expr.right.extract_magic_blen_calls(output);
-            },
+            }
             Expression::Unary(expr) => {
                 expr.inner.extract_magic_blen_calls(output);
-            },
+            }
             Expression::Cast(expr) => {
                 expr.inner.extract_magic_blen_calls(output);
-            },
+            }
             Expression::ArrayIndex(expr) => {
                 expr.array.extract_magic_blen_calls(output);
                 expr.index.extract_magic_blen_calls(output);
-            },
+            }
             Expression::Ternary(expr) => {
                 expr.condition.extract_magic_blen_calls(output);
                 expr.if_true.extract_magic_blen_calls(output);
                 expr.if_false.extract_magic_blen_calls(output);
-            },
+            }
             Expression::EnumAccess(_) => (),
             Expression::Int(_) => (),
             Expression::ConstRef(_) => (),
@@ -334,10 +385,10 @@ impl Expression {
                         _ => panic!("invalid blen target, expected field ref"), // todo: better error message
                     });
                 }
-            },
+            }
             Expression::Member(expr) => {
                 expr.target.extract_magic_blen_calls(output);
-            },
+            }
         }
     }
 }

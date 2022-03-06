@@ -49,8 +49,13 @@ impl Context {
             };
             let len = array_type.length.value.as_ref().cloned().unwrap();
             let length_register = self.alloc_register();
-            self.instructions.push(Instruction::Eval(length_register, len, self.field_register_map.clone()));
-            self.instructions.push(Instruction::Skip(source, length_register));
+            self.instructions.push(Instruction::Eval(
+                length_register,
+                len,
+                self.field_register_map.clone(),
+            ));
+            self.instructions
+                .push(Instruction::Skip(source, length_register));
             return vec![];
         }
         match &*field.type_.borrow() {
@@ -129,7 +134,11 @@ impl Context {
                 let mut args = vec![];
                 for arg in r.arguments.iter() {
                     let r = self.alloc_register();
-                    self.instructions.push(Instruction::Eval(r, arg.clone(), self.field_register_map.clone()));
+                    self.instructions.push(Instruction::Eval(
+                        r,
+                        arg.clone(),
+                        self.field_register_map.clone(),
+                    ));
                     args.push(r);
                 }
                 if let Type::Foreign(f) = &*r.target.type_.borrow() {

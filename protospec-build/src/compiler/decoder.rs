@@ -1,6 +1,6 @@
 use super::*;
 use crate::coder::decode::*;
-use crate::{coder::*, map_async};
+use crate::{coder::*, map_async, Endian, EndianScalarType};
 
 fn emit_target(target: &Target) -> TokenStream {
     match target {
@@ -103,7 +103,14 @@ fn prepare_decode(
                     let #target = #name { #items };
                 });
             }
-            Instruction::Construct(target, Constructable::TaggedEnum { name, discriminant, values }) => {
+            Instruction::Construct(
+                target,
+                Constructable::TaggedEnum {
+                    name,
+                    discriminant,
+                    values,
+                },
+            ) => {
                 let target = emit_register(*target);
                 let items = flatten(
                     values
@@ -120,7 +127,14 @@ fn prepare_decode(
                     let #target = #name::#discriminant(#items);
                 });
             }
-            Instruction::Construct(target, Constructable::TaggedEnumStruct { name, discriminant, values }) => {
+            Instruction::Construct(
+                target,
+                Constructable::TaggedEnumStruct {
+                    name,
+                    discriminant,
+                    values,
+                },
+            ) => {
                 let target = emit_register(*target);
                 let items = flatten(
                     values
@@ -240,12 +254,19 @@ fn prepare_decode(
 
                 let enum_ident = format_ident!("{}", &name);
                 let length = type_.size() as usize;
+                let decoder = match type_ {
+                    PrimitiveType::Scalar(EndianScalarType {
+                        endian: Endian::Little,
+                        ..
+                    }) => quote! { from_le_bytes },
+                    _ => quote! { from_be_bytes },
+                };
 
                 statements.push(quote! {
                     let #value = {
                         let mut scratch = [0u8; #length];
                         #target.read_exact(&mut scratch[..])#async_?;
-                        #enum_ident::from_repr(#type_::from_be_bytes((&scratch[..]).try_into()?))?
+                        #enum_ident::from_repr(#type_::#decoder((&scratch[..]).try_into()?))?
                     };
                 });
             }
@@ -265,18 +286,32 @@ fn prepare_decode(
                 let target = emit_target(target);
                 let data = emit_register(*data);
                 let length = type_.size() as usize;
+                let decoder = match type_ {
+                    PrimitiveType::Scalar(EndianScalarType {
+                        endian: Endian::Little,
+                        ..
+                    }) => quote! { from_le_bytes },
+                    _ => quote! { from_be_bytes },
+                };
 
                 statements.push(quote! {
                     let #data = {
                         let mut scratch = [0u8; #length];
                         #target.read_exact(&mut scratch[..])#async_?;
-                        #type_::from_be_bytes((&scratch[..]).try_into()?)
+                        #type_::#decoder((&scratch[..]).try_into()?)
                     };
                 });
             }
             Instruction::DecodePrimitiveArray(target, data, type_, len) => {
                 let target = emit_target(target);
                 let data = emit_register(*data);
+                let decoder = match type_ {
+                    PrimitiveType::Scalar(EndianScalarType {
+                        endian: Endian::Little,
+                        ..
+                    }) => quote! { from_le_bytes },
+                    _ => quote! { from_be_bytes },
+                };
                 if let Some(len) = len {
                     let len = emit_register(*len);
                     statements.push(quote! {
@@ -286,7 +321,7 @@ fn prepare_decode(
                             let mut raw: Vec<u8> = Vec::with_capacity(t_count * size);
                             unsafe { raw.set_len(t_count * size) };
                             #target.read_exact(&mut raw[..])#async_?;
-                            raw.chunks_exact(size).map(|x| #type_::from_be_bytes(x.try_into().unwrap())).collect::<Vec<#type_>>()
+                            raw.chunks_exact(size).map(|x| #type_::#decoder(x.try_into().unwrap())).collect::<Vec<#type_>>()
                         };
                     });
                 } else {
@@ -295,7 +330,7 @@ fn prepare_decode(
                             let mut raw: Vec<u8> = Vec::new();
                             #target.read_to_end(&mut raw)#async_?;
                             let size = mem::size_of::<#type_>();
-                            raw.chunks_exact(size).map(|x| #type_::from_be_bytes(x.try_into().unwrap())).collect::<Vec<#type_>>()
+                            raw.chunks_exact(size).map(|x| #type_::#decoder(x.try_into().unwrap())).collect::<Vec<#type_>>()
                         };
                     });
                 }
@@ -304,6 +339,14 @@ fn prepare_decode(
                 let target = emit_target(target);
                 let data = emit_register(*data);
                 let enum_ident = format_ident!("{}", &name);
+                let decoder = match type_ {
+                    PrimitiveType::Scalar(EndianScalarType {
+                        endian: Endian::Little,
+                        ..
+                    }) => quote! { from_le_bytes },
+                    _ => quote! { from_be_bytes },
+                };
+
                 if let Some(len) = len {
                     let len = emit_register(*len);
                     statements.push(quote! {
@@ -313,7 +356,7 @@ fn prepare_decode(
                             let mut raw: Vec<u8> = Vec::with_capacity(t_count * size);
                             unsafe { raw.set_len(t_count * size) };
                             #target.read_exact(&mut raw[..])#async_?;
-                            raw.chunks_exact(size).map(|x| #enum_ident::from_repr(#type_::from_be_bytes(x.try_into().unwrap()))).collect::<Result<Vec<#enum_ident>>>()?
+                            raw.chunks_exact(size).map(|x| #enum_ident::from_repr(#type_::#decoder(x.try_into().unwrap()))).collect::<Result<Vec<#enum_ident>>>()?
                         };
                     });
                 } else {
@@ -322,7 +365,7 @@ fn prepare_decode(
                             let mut raw: Vec<u8> = Vec::new();
                             #target.read_to_end(&mut raw)#async_?;
                             let size = mem::size_of::<#type_>();
-                            raw.chunks_exact(size).map(|x| #enum_ident::from_repr(#type_::from_be_bytes(x.try_into().unwrap()))).collect::<Result<Vec<#enum_ident>>>()?
+                            raw.chunks_exact(size).map(|x| #enum_ident::from_repr(#type_::#decoder(x.try_into().unwrap()))).collect::<Result<Vec<#enum_ident>>>()?
                         };
                     });
                 }
@@ -387,19 +430,27 @@ fn prepare_decode(
                 });
             }
             Instruction::Conditional(target, interior, condition, inner) => {
-                let targets = target.iter().copied().map(emit_register).collect::<Vec<_>>();
+                let targets = target
+                    .iter()
+                    .copied()
+                    .map(emit_register)
+                    .collect::<Vec<_>>();
                 let targets = flatten_separated(targets, quote! {,});
                 let targets = if target.len() > 1 {
                     quote! { (#targets) }
                 } else {
                     targets
                 };
-                let interiors = interior.iter().copied().map(|r| {
-                    let r = emit_register(r);
-                    quote! {
-                        Some(#r)
-                    }
-                }).collect::<Vec<_>>();
+                let interiors = interior
+                    .iter()
+                    .copied()
+                    .map(|r| {
+                        let r = emit_register(r);
+                        quote! {
+                            Some(#r)
+                        }
+                    })
+                    .collect::<Vec<_>>();
                 let anti_interiors = interior.iter().map(|_| quote! { None }).collect::<Vec<_>>();
 
                 let interiors = flatten_separated(interiors, quote! {,});
@@ -435,18 +486,18 @@ fn prepare_decode(
                         #inner
                     }
                 });
-            },
+            }
             Instruction::Return(result) => {
                 let result = emit_register(*result);
                 statements.push(quote! {
                     return Ok(#result);
                 });
-            },
+            }
             Instruction::Error(e) => {
                 statements.push(quote! {
                     return Err(decode_error(#e).into());
                 });
-            },
+            }
             Instruction::Skip(target, len) => {
                 let target = emit_target(target);
                 let len = emit_register(*len);
@@ -454,7 +505,7 @@ fn prepare_decode(
                     let mut big_scratch = vec![0u8; #len as usize];
                     #target.read_exact(&mut big_scratch[..])#async_?;
                 });
-            },
+            }
         }
     }
 

@@ -32,7 +32,7 @@ impl Scope {
                     }
                     if expr.op == ast::UnaryOp::Negate {
                         match inner_type {
-                            Type::Scalar(s) if !s.is_signed() => {
+                            Type::Scalar(s) if !s.scalar.is_signed() => {
                                 return Err(AsgError::UnexpectedType(
                                     inner_type.to_string(),
                                     "signed integer".to_string(),

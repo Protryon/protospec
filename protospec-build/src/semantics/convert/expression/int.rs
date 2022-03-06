@@ -10,11 +10,13 @@ impl Scope {
             (_, Some(s)) => *s,
             (PartialType::Scalar(PartialScalarType::Some(s)), _) => *s,
             (PartialType::Scalar(PartialScalarType::Defaults(s)), _) => *s,
-            (x, _) => return Err(AsgError::UnexpectedType(
-                "integer".to_string(),
-                x.to_string(),
-                expr.span,
-            )),
+            (x, _) => {
+                return Err(AsgError::UnexpectedType(
+                    "integer".to_string(),
+                    x.to_string(),
+                    expr.span,
+                ))
+            }
         };
         Ok(Int {
             value: ConstInt::parse(type_, &expr.value, expr.span)?,

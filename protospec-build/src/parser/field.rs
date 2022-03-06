@@ -4,7 +4,12 @@ pub fn parse_field(t: &mut TokenIter) -> ParseResult<Field> {
     let start = t.peek_span()?;
 
     let type_ = parse_type(t)?;
-    let FieldComponents { calculated, flags, condition, transforms } = parse_field_components(t)?;
+    let FieldComponents {
+        calculated,
+        flags,
+        condition,
+        transforms,
+    } = parse_field_components(t)?;
 
     let out = Field {
         span: transforms
@@ -47,9 +52,7 @@ fn parse_calculated_clause(t: &mut TokenIter) -> ParseResult<Option<Box<Expressi
     })
 }
 
-fn parse_field_components(
-    t: &mut TokenIter,
-) -> ParseResult<FieldComponents> {
+fn parse_field_components(t: &mut TokenIter) -> ParseResult<FieldComponents> {
     let calculated = parse_calculated_clause(t)?;
 
     let flags = parse_flags(t)?;

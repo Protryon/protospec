@@ -22,6 +22,17 @@ fn test_container() {
     .unwrap();
 }
 
+#[test]
+fn test_container_le() {
+    parse(
+        r#"
+    type test = container {
+        west: u32le,
+    };
+    "#,
+    )
+    .unwrap();
+}
 
 #[test]
 fn test_container_empty() {

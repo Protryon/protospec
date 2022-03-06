@@ -16,7 +16,11 @@ impl Scope {
         let mut arguments = vec![];
         if let Some(ast_arguments) = ast_arguments {
             for argument in ast_arguments {
-                let target_type = Scope::convert_ast_type(&sub_scope, &argument.type_.raw_type, TypePurpose::Expression)?;
+                let target_type = Scope::convert_ast_type(
+                    &sub_scope,
+                    &argument.type_.raw_type,
+                    TypePurpose::Expression,
+                )?;
                 sub_scope.borrow_mut().declared_inputs.insert(
                     argument.name.name.clone(),
                     Arc::new(Input {
@@ -72,8 +76,12 @@ impl Scope {
             span,
         } in field.transforms.iter()
         {
-            let def_transform = if let Some(def_transform) =
-                sub_scope.borrow().program.borrow().transforms.get(&name.name)
+            let def_transform = if let Some(def_transform) = sub_scope
+                .borrow()
+                .program
+                .borrow()
+                .transforms
+                .get(&name.name)
             {
                 def_transform.clone()
             } else {

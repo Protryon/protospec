@@ -12,9 +12,7 @@ impl AsgExpression for MemberExpression {
     fn get_type(&self) -> Option<Type> {
         let type_ = self.target.get_type()?.resolved().into_owned();
         match &*type_.resolved() {
-            Type::Bitfield(_) => {
-                Some(Type::Bool)
-            }
+            Type::Bitfield(_) => Some(Type::Bool),
             _ => None,
         }
     }

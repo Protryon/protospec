@@ -32,6 +32,14 @@ pub enum Token {
     I32,
     I64,
     I128,
+    U16Le,
+    U32Le,
+    U64Le,
+    U128Le,
+    I16Le,
+    I32Le,
+    I64Le,
+    I128Le,
     F32,
     F64,
     Bool,
@@ -108,6 +116,14 @@ impl fmt::Display for Token {
             I32 => write!(f, "i32 "),
             I64 => write!(f, "i64 "),
             I128 => write!(f, "i128 "),
+            U16Le => write!(f, "u16le "),
+            U32Le => write!(f, "u32le "),
+            U64Le => write!(f, "u64le "),
+            U128Le => write!(f, "u128le "),
+            I16Le => write!(f, "i16le "),
+            I32Le => write!(f, "i32le "),
+            I64Le => write!(f, "i64le "),
+            I128Le => write!(f, "i128le "),
             F32 => write!(f, "f32 "),
             F64 => write!(f, "f64 "),
             Bool => write!(f, "bool "),
@@ -407,6 +423,14 @@ impl Token {
                     "u32" => Token::U32,
                     "u64" => Token::U64,
                     "u128" => Token::U128,
+                    "i16le" => Token::I16Le,
+                    "i32le" => Token::I32Le,
+                    "i64le" => Token::I64Le,
+                    "i128le" => Token::I128Le,
+                    "u16le" => Token::U16Le,
+                    "u32le" => Token::U32Le,
+                    "u64le" => Token::U64Le,
+                    "u128le" => Token::U128Le,
                     "transform" => Token::Transform,
                     "function" => Token::Function,
                     "const" => Token::Const,
@@ -526,7 +550,7 @@ pub fn tokenize(input: &str, strip_comments: bool) -> Result<Vec<SpannedToken>> 
                 match &token {
                     Token::CommentLine(_) => {
                         line_no += 1;
-                    },
+                    }
                     Token::CommentBlock(s) => {
                         line_no += s.chars().filter(|x| *x == '\n').count() as u64;
                     }
@@ -564,7 +588,10 @@ pub fn tokenize(input: &str, strip_comments: bool) -> Result<Vec<SpannedToken>> 
         }
     }
     if strip_comments {
-        Ok(tokens.into_iter().filter(|x| !matches!(x.token, Token::CommentLine(_) | Token::CommentBlock(_))).collect())
+        Ok(tokens
+            .into_iter()
+            .filter(|x| !matches!(x.token, Token::CommentLine(_) | Token::CommentBlock(_)))
+            .collect())
     } else {
         Ok(tokens)
     }
@@ -576,20 +603,12 @@ mod tests {
 
     #[test]
     fn test_string() {
-        let tokens = tokenize(
-            r#""test" "test\"test""#,
-            false,
-        )
-        .unwrap();
+        let tokens = tokenize(r#""test" "test\"test""#, false).unwrap();
         let mut output = String::new();
         for SpannedToken { token, .. } in tokens.iter() {
             output += &token.to_string();
         }
-        assert_eq!(
-            output,
-            r#""test""test"test""#
-        );
-
+        assert_eq!(output, r#""test""test"test""#);
     }
 
     #[test]
@@ -608,6 +627,8 @@ mod tests {
         import_ffi
         i8
         u8
+        i16le
+        u16le
         transform
         function
         const/*
@@ -625,7 +646,7 @@ mod tests {
         ,;:?[]{}<>?+-/ *%..<=>= = == != ! () // test$
         :> || && | ^ | >> << >>>~ . ?:
         //"#,
-        false,
+            false,
         )
         .unwrap();
         let mut output = String::new();
@@ -634,7 +655,7 @@ mod tests {
         }
         assert_eq!(
             output,
-            r#"test_ident"string""str"ing""str\ing"12345-12345type as import import_ffi i8 u8 transform function const /*
+            r#"test_ident"string""str"ing""str\ing"12345-12345type as import import_ffi i8 u8 i16le u16le transform function const /*
 
         test block*/ container f32 f64 enum default bitfield true false bool from ,;:?[]{}< > ?+-/ *%.. <= >= = == != ! ()// test$
 :> || && | ^| >> << >>> ~. ?: //

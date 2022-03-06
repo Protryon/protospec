@@ -41,7 +41,12 @@ impl Context {
             match &*type_ {
                 // todo: const-length type optimizations for container/array/foreign
                 Type::Container(_) | Type::Array(_) | Type::Foreign(_) | Type::Ref(_) => (),
-                Type::Enum(_) | Type::Bitfield(_) | Type::Scalar(_) | Type::F32 | Type::F64 | Type::Bool => {
+                Type::Enum(_)
+                | Type::Bitfield(_)
+                | Type::Scalar(_)
+                | Type::F32
+                | Type::F64
+                | Type::Bool => {
                     self.instructions.push(Instruction::EncodePrimitiveArray(
                         target,
                         source,
@@ -49,7 +54,7 @@ impl Context {
                         len,
                     ));
                     return;
-                },
+                }
             }
         }
 
@@ -62,11 +67,8 @@ impl Context {
             ops.push(FieldRef::Ref);
         }
         ops.push(FieldRef::ArrayAccess(iter_index));
-        self.instructions.push(Instruction::GetField(
-            new_source,
-            source,
-            ops,
-        ));
+        self.instructions
+            .push(Instruction::GetField(new_source, source, ops));
         self.encode_type(&type_.element, target, new_source);
         let drained = self.instructions.drain(current_pos..).collect();
         let len = if let Some(len) = len {
@@ -83,7 +85,7 @@ impl Context {
             self.instructions.push(Instruction::EncodePrimitiveArray(
                 target,
                 terminator,
-                Type::Scalar(ScalarType::U8),
+                Type::Scalar(ScalarType::U8.into()),
                 None,
             ));
         }

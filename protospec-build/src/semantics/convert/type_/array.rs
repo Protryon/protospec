@@ -6,7 +6,11 @@ impl Scope {
         type_: &ast::Array,
     ) -> AsgResult<Type> {
         let length = Scope::convert_length(self_, &type_.length)?;
-        let element = Scope::convert_ast_type(self_, &type_.interior_type.raw_type, TypePurpose::ArrayInterior)?;
+        let element = Scope::convert_ast_type(
+            self_,
+            &type_.interior_type.raw_type,
+            TypePurpose::ArrayInterior,
+        )?;
 
         Ok(Type::Array(Box::new(ArrayType {
             element: Box::new(element),

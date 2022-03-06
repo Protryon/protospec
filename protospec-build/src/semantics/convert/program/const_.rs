@@ -15,7 +15,8 @@ impl Scope {
                 defined.span,
             ));
         }
-        let type_ = Scope::convert_ast_type(&scope, &const_.type_.raw_type, TypePurpose::ConstDefinition)?;
+        let type_ =
+            Scope::convert_ast_type(&scope, &const_.type_.raw_type, TypePurpose::ConstDefinition)?;
         match type_ {
             Type::Container(_) | Type::Enum(_) | Type::Bitfield(_) => {
                 return Err(AsgError::ConstTypeDefinition(

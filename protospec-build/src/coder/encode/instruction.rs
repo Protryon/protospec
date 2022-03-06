@@ -42,9 +42,9 @@ pub enum Instruction {
     /// dest, source, arguments
     EncodeRef(Target, usize, Vec<usize>),
     /// rep type, dest, source
-    EncodeEnum(Target, usize),
+    EncodeEnum(Target, usize, EndianScalarType),
     /// dest, source
-    EncodeBitfield(Target, usize),
+    EncodeBitfield(Target, usize, EndianScalarType),
     /// dest, source, type
     EncodePrimitive(Target, usize, PrimitiveType),
     /// dest, source, element type, known length if any
@@ -85,41 +85,77 @@ impl fmt::Display for Instruction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Instruction::Eval(dest, expression) => write!(f, "Eval({}, {:?})", dest, expression),
-            Instruction::GetField(dest, source, ops) => write!(f, "GetField({}, {}, {:?})", dest, source, ops),
+            Instruction::GetField(dest, source, ops) => {
+                write!(f, "GetField({}, {}, {:?})", dest, source, ops)
+            }
             Instruction::GetRef(dest, ref_name) => write!(f, "GetRef({}, '{}')", dest, ref_name),
-            Instruction::SetRef(ref_name, source) => write!(f, "SetRef('{}', {})", ref_name, source),
+            Instruction::SetRef(ref_name, source) => {
+                write!(f, "SetRef('{}', {})", ref_name, source)
+            }
             Instruction::AllocBuf(buf, len) => write!(f, "AllocBuf({}, {})", buf, len),
             Instruction::AllocDynBuf(buf) => write!(f, "AllocDynBuf({})", buf),
             Instruction::WrapStream(stream, new_stream, transform, arguments) => {
-                write!(f, "WrapStream({:?}, {}, '{}', ", stream, new_stream, transform.name)?;
+                write!(
+                    f,
+                    "WrapStream({:?}, {}, '{}', ",
+                    stream, new_stream, transform.name
+                )?;
                 write_arguments(f, &arguments[..])?;
                 write!(f, ")")
-            },
-            Instruction::ConditionalWrapStream(condition, prelude, stream, new_stream, owned_new_stream, transform, arguments) => {
-                write!(f, "ConditionalWrapStream({}, {:?}, {}, {}, '{}', ", condition, stream, new_stream, owned_new_stream, transform.name)?;
+            }
+            Instruction::ConditionalWrapStream(
+                condition,
+                prelude,
+                stream,
+                new_stream,
+                owned_new_stream,
+                transform,
+                arguments,
+            ) => {
+                write!(
+                    f,
+                    "ConditionalWrapStream({}, {:?}, {}, {}, '{}', ",
+                    condition, stream, new_stream, owned_new_stream, transform.name
+                )?;
                 write_arguments(f, &arguments[..])?;
                 write!(f, ")")?;
                 for instruction in prelude {
                     write!(indented(f), "\n{}", instruction)?;
                 }
                 Ok(())
-            },
+            }
             Instruction::EndStream(stream) => write!(f, "EndStream({})", stream),
-            Instruction::EmitBuf(dest, buf_handle) => write!(f, "EmitBuf({:?}, {})", dest, buf_handle),
+            Instruction::EmitBuf(dest, buf_handle) => {
+                write!(f, "EmitBuf({:?}, {})", dest, buf_handle)
+            }
             Instruction::EncodeForeign(dest, source, type_, arguments) => {
-                write!(f, "EncodeForeign({:?}, {}, '{}', ", dest, source, type_.name)?;
+                write!(
+                    f,
+                    "EncodeForeign({:?}, {}, '{}', ",
+                    dest, source, type_.name
+                )?;
                 write_arguments(f, &arguments[..])?;
                 write!(f, ")")
-            },
+            }
             Instruction::EncodeRef(dest, source, arguments) => {
                 write!(f, "EncodeRef({:?}, {}, ", dest, source)?;
                 write_arguments(f, &arguments[..])?;
                 write!(f, ")")
-            },
-            Instruction::EncodeEnum(dest, source) => write!(f, "EncodeEnum({:?}, {})", dest, source),
-            Instruction::EncodeBitfield(dest, source) => write!(f, "EncodeBitfield({:?}, {})", dest, source),
-            Instruction::EncodePrimitive(dest, source, type_) => write!(f, "EncodePrimitive({:?}, {}, {:?})", dest, source, type_),
-            Instruction::EncodePrimitiveArray(dest, source, element_type, length) => write!(f, "EncodePrimitiveArray({:?}, {}, {:?}, {:?})", dest, source, element_type, length),
+            }
+            Instruction::EncodeEnum(dest, source, type_) => {
+                write!(f, "EncodeEnum({:?}, {}, {})", dest, source, type_)
+            }
+            Instruction::EncodeBitfield(dest, source, type_) => {
+                write!(f, "EncodeBitfield({:?}, {}, {})", dest, source, type_)
+            }
+            Instruction::EncodePrimitive(dest, source, type_) => {
+                write!(f, "EncodePrimitive({:?}, {}, {})", dest, source, type_)
+            }
+            Instruction::EncodePrimitiveArray(dest, source, element_type, length) => write!(
+                f,
+                "EncodePrimitiveArray({:?}, {}, {}, {:?})",
+                dest, source, element_type, length
+            ),
             Instruction::Pad(dest, length) => write!(f, "Pad({:?}, {})", dest, length),
             Instruction::Loop(inner, end, instructions) => {
                 write!(f, "Loop({}, {})", inner, end)?;
@@ -127,10 +163,16 @@ impl fmt::Display for Instruction {
                     write!(indented(f), "\n{}", instruction)?;
                 }
                 Ok(())
-            },
-            Instruction::GetLen(dest, buffer, cast_type) => write!(f, "GetLen({}, {}, {:?})", dest, buffer, cast_type),
+            }
+            Instruction::GetLen(dest, buffer, cast_type) => {
+                write!(f, "GetLen({}, {}, {:?})", dest, buffer, cast_type)
+            }
             Instruction::Drop(register) => write!(f, "Drop({})", register),
-            Instruction::NullCheck(original, checked, is_copyable, message) => write!(f, "NullCheck({}, {}, {}, {})", original, checked, is_copyable, message),
+            Instruction::NullCheck(original, checked, is_copyable, message) => write!(
+                f,
+                "NullCheck({}, {}, {}, {})",
+                original, checked, is_copyable, message
+            ),
             Instruction::Conditional(condition, if_true, if_false) => {
                 write!(f, "Conditional({})", condition)?;
                 for instruction in if_true {
@@ -141,22 +183,36 @@ impl fmt::Display for Instruction {
                     write!(indented(f), "\n{}", instruction)?;
                 }
                 Ok(())
-            },
-            Instruction::UnwrapEnum(enum_name, discriminant, original, checked, message) => write!(f, "UnwrapEnum('{}', '{}', {}, {}, '{}')", enum_name, discriminant, original, checked, message),
+            }
+            Instruction::UnwrapEnum(enum_name, discriminant, original, checked, message) => write!(
+                f,
+                "UnwrapEnum('{}', '{}', {}, {}, '{}')",
+                enum_name, discriminant, original, checked, message
+            ),
             Instruction::UnwrapEnumStruct(enum_name, discriminant, original, checked, message) => {
-                write!(f, "UnwrapEnum('{}', '{}', {}, '{}')", enum_name, discriminant, original, message)?;
+                write!(
+                    f,
+                    "UnwrapEnum('{}', '{}', {}, '{}')",
+                    enum_name, discriminant, original, message
+                )?;
                 for (name, register, do_copy) in checked {
-                    write!(indented(f), "\n{}: {}{}", name, if *do_copy { "*" } else { "" }, register)?;
+                    write!(
+                        indented(f),
+                        "\n{}: {}{}",
+                        name,
+                        if *do_copy { "*" } else { "" },
+                        register
+                    )?;
                 }
                 Ok(())
-            },
+            }
             Instruction::BreakBlock(instructions) => {
                 write!(f, "BreakBlock()")?;
                 for instruction in instructions {
                     write!(indented(f), "\n{}", instruction)?;
                 }
                 Ok(())
-            },
+            }
             Instruction::Break => write!(f, "Break()"),
         }
     }
