@@ -478,7 +478,7 @@ pub fn generate_enum(name: &str, item: &EnumType, options: &CompileOptions) -> T
         .iter()
         .position(|(_, x)| matches!(x, EnumValue::Default))
         .is_some();
-    let rep = format_ident!("{}", item.rep.to_string());
+    let rep = format_ident!("{}", item.rep.scalar.to_string());
 
     for (name, value) in item.items.iter() {
         let discriminant_ident = format_ident!("{}", name);
@@ -644,7 +644,7 @@ pub fn generate_bitfield(
     let fields = flatten(fields);
     let funcs = flatten(funcs);
 
-    let rep = format_ident!("{}", item.rep.to_string());
+    let rep = format_ident!("{}", item.rep.scalar.to_string());
     let rep_size = item.rep.scalar.size() as usize;
     let derives = options.emit_struct_derives(&["Clone", "Copy", "Default"]);
 

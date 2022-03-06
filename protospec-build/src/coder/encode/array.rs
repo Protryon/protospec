@@ -38,23 +38,40 @@ impl Context {
 
         if terminator.is_none() {
             let type_ = type_.element.resolved();
-            match &*type_ {
+            let primitive_type = match &*type_ {
                 // todo: const-length type optimizations for container/array/foreign
-                Type::Container(_) | Type::Array(_) | Type::Foreign(_) | Type::Ref(_) => (),
-                Type::Enum(_)
-                | Type::Bitfield(_)
-                | Type::Scalar(_)
-                | Type::F32
-                | Type::F64
-                | Type::Bool => {
-                    self.instructions.push(Instruction::EncodePrimitiveArray(
+                Type::Container(_) | Type::Array(_) | Type::Foreign(_) | Type::Ref(_) => None,
+                Type::Enum(e) => {
+                    self.instructions.push(Instruction::EncodeReprArray(
                         target,
                         source,
-                        type_.as_ref().clone(),
+                        PrimitiveType::Scalar(e.rep),
                         len,
                     ));
                     return;
-                }
+                },
+                Type::Bitfield(e) => {
+                    self.instructions.push(Instruction::EncodeReprArray(
+                        target,
+                        source,
+                        PrimitiveType::Scalar(e.rep),
+                        len,
+                    ));
+                    return;
+                },
+                Type::Scalar(s) => Some(PrimitiveType::Scalar(*s)),
+                Type::F32 => Some(PrimitiveType::F32),
+                Type::F64 => Some(PrimitiveType::F64),
+                Type::Bool => Some(PrimitiveType::Bool),
+            };
+            if let Some(primitive_type) = primitive_type {
+                self.instructions.push(Instruction::EncodePrimitiveArray(
+                    target,
+                    source,
+                    primitive_type,
+                    len,
+                ));
+                return;
             }
         }
 
@@ -85,7 +102,7 @@ impl Context {
             self.instructions.push(Instruction::EncodePrimitiveArray(
                 target,
                 terminator,
-                Type::Scalar(ScalarType::U8.into()),
+                PrimitiveType::Scalar(ScalarType::U8.into()),
                 None,
             ));
         }

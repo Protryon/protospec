@@ -48,7 +48,9 @@ pub enum Instruction {
     /// dest, source, type
     EncodePrimitive(Target, usize, PrimitiveType),
     /// dest, source, element type, known length if any
-    EncodePrimitiveArray(Target, usize, Type, Option<usize>),
+    EncodePrimitiveArray(Target, usize, PrimitiveType, Option<usize>),
+    /// dest, source, element type, known length if any
+    EncodeReprArray(Target, usize, PrimitiveType, Option<usize>),
     /// dest, length register
     Pad(Target, usize),
 
@@ -154,6 +156,11 @@ impl fmt::Display for Instruction {
             Instruction::EncodePrimitiveArray(dest, source, element_type, length) => write!(
                 f,
                 "EncodePrimitiveArray({:?}, {}, {}, {:?})",
+                dest, source, element_type, length
+            ),
+            Instruction::EncodeReprArray(dest, source, element_type, length) => write!(
+                f,
+                "EncodeReprArray({:?}, {}, {}, {:?})",
                 dest, source, element_type, length
             ),
             Instruction::Pad(dest, length) => write!(f, "Pad({:?}, {})", dest, length),

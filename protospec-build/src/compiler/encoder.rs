@@ -260,26 +260,26 @@ impl EncoderContext {
                         #target.write_all(&#data.to_be_bytes()[..])#async_?;
                     });
                 }
-                Instruction::EncodePrimitiveArray(target, data, type_, len) => {
+                Instruction::EncodePrimitiveArray(target, data, type_, len) | Instruction::EncodeReprArray(target, data, type_, len) => {
                     let target = emit_target(target);
                     let data = emit_register(*data);
                     let writing = match type_ {
-                        Type::Bool => {
+                        PrimitiveType::Bool => {
                             quote! {
                                 for x in #data.iter() {
                                     #target.write_all(&[if x { 1u8 } else { 0u8 }])#async_?;
                                 }
                             }
                         }
-                        Type::Scalar(EndianScalarType {
+                        PrimitiveType::Scalar(EndianScalarType {
                             scalar: ScalarType::U8,
                             ..
-                        }) => {
+                        }) if matches!(instruction, Instruction::EncodePrimitiveArray(..)) => {
                             quote! {
                                 #target.write_all(&#data[..])#async_?;
                             }
                         }
-                        Type::Scalar(EndianScalarType {
+                        PrimitiveType::Scalar(EndianScalarType {
                             endian: Endian::Little,
                             ..
                         }) => {

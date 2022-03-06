@@ -17,17 +17,17 @@ type Tag = enum u8 {
 };
 
 type NBTString = container {
-    len: u16 +auto,
+    len: u16 = len(value) :> u16,
     value: utf8(len),
 };
 
 type IntArray = container {
-    len: i32 +auto,
+    len: i32 = len(value) :> i32,
     value: i32[len],
 };
 
 type LongArray = container {
-    len: i32 +auto,
+    len: i32 = len(value) :> i32
     value: i64[len],
 };
 
@@ -47,7 +47,7 @@ type Payload(t: Tag) = container +tagged_enum {
 
 type CompoundItem = container {
     type_id: Tag,
-    name_len: u16 +auto,
+    name_len: u16 = len(name) :> u16,
     name: utf8(name_len),
     payload: Payload(type_id),
 };
@@ -58,6 +58,6 @@ type Compound = container {
 
 type List = container {
     type_id: Tag,
-    length: i32 +auto,
+    length: i32 = len(items) :> length,
     items: Payload(type_id)[length],
 };
