@@ -18,6 +18,8 @@ pub enum ScalarType {
     I32,
     I64,
     I128,
+    F32,
+    F64
 }
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Copy, Debug)]
@@ -61,6 +63,8 @@ impl ScalarType {
             ScalarType::I32 | ScalarType::U32 => 4,
             ScalarType::I64 | ScalarType::U64 => 8,
             ScalarType::I128 | ScalarType::U128 => 16,
+            ScalarType::F32 => 4,
+            ScalarType::F64 => 8,
         }
     }
 }
@@ -82,6 +86,8 @@ impl fmt::Display for ScalarType {
                 I32 => "i32",
                 I64 => "i64",
                 I128 => "i128",
+                F32 => "f32",
+                F64 => "f64",
             }
         )
     }

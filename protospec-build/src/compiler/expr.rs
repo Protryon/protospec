@@ -5,6 +5,8 @@ use std::{
 
 use proc_macro2::Literal;
 
+use crate::ScalarType;
+
 use super::*;
 
 #[derive(PartialEq)]
@@ -12,16 +14,14 @@ pub enum ConstValue {
     Int(ConstInt),
     Bool(bool),
     String(Vec<u8>),
-    F32(f32),
-    F64(f64),
+    Float(ConstFloat),
 }
 
 impl PartialOrd for ConstValue {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match (self, other) {
             (ConstValue::Int(i1), ConstValue::Int(i2)) => i1.partial_cmp(i2),
-            (ConstValue::F32(i1), ConstValue::F32(i2)) => i1.partial_cmp(i2),
-            (ConstValue::F64(i1), ConstValue::F64(i2)) => i1.partial_cmp(i2),
+            (ConstValue::Float(i1), ConstValue::Float(i2)) => i1.partial_cmp(i2),
             _ => None,
         }
     }
@@ -33,8 +33,7 @@ impl Add for ConstValue {
     fn add(self, other: Self) -> Self::Output {
         match (self, other) {
             (ConstValue::Int(i1), ConstValue::Int(i2)) => Some(ConstValue::Int(i1.add(i2)?)),
-            (ConstValue::F32(i1), ConstValue::F32(i2)) => Some(ConstValue::F32(i1.add(i2))),
-            (ConstValue::F64(i1), ConstValue::F64(i2)) => Some(ConstValue::F64(i1.add(i2))),
+            (ConstValue::Float(i1), ConstValue::Float(i2)) => Some(ConstValue::Float(i1.add(i2)?)),
             (ConstValue::String(mut i1), ConstValue::String(i2)) => {
                 i1.extend(i2);
                 Some(ConstValue::String(i1))
@@ -50,8 +49,7 @@ impl Sub for ConstValue {
     fn sub(self, other: Self) -> Self::Output {
         match (self, other) {
             (ConstValue::Int(i1), ConstValue::Int(i2)) => Some(ConstValue::Int(i1.sub(i2)?)),
-            (ConstValue::F32(i1), ConstValue::F32(i2)) => Some(ConstValue::F32(i1.sub(i2))),
-            (ConstValue::F64(i1), ConstValue::F64(i2)) => Some(ConstValue::F64(i1.sub(i2))),
+            (ConstValue::Float(i1), ConstValue::Float(i2)) => Some(ConstValue::Float(i1.sub(i2)?)),
             _ => None,
         }
     }
@@ -63,8 +61,7 @@ impl Mul for ConstValue {
     fn mul(self, other: Self) -> Self::Output {
         match (self, other) {
             (ConstValue::Int(i1), ConstValue::Int(i2)) => Some(ConstValue::Int(i1.mul(i2)?)),
-            (ConstValue::F32(i1), ConstValue::F32(i2)) => Some(ConstValue::F32(i1.mul(i2))),
-            (ConstValue::F64(i1), ConstValue::F64(i2)) => Some(ConstValue::F64(i1.mul(i2))),
+            (ConstValue::Float(i1), ConstValue::Float(i2)) => Some(ConstValue::Float(i1.mul(i2)?)),
             _ => None,
         }
     }
@@ -76,8 +73,7 @@ impl Div for ConstValue {
     fn div(self, other: Self) -> Self::Output {
         match (self, other) {
             (ConstValue::Int(i1), ConstValue::Int(i2)) => Some(ConstValue::Int(i1.div(i2)?)),
-            (ConstValue::F32(i1), ConstValue::F32(i2)) => Some(ConstValue::F32(i1.div(i2))),
-            (ConstValue::F64(i1), ConstValue::F64(i2)) => Some(ConstValue::F64(i1.div(i2))),
+            (ConstValue::Float(i1), ConstValue::Float(i2)) => Some(ConstValue::Float(i1.div(i2)?)),
             _ => None,
         }
     }
@@ -89,8 +85,7 @@ impl Rem for ConstValue {
     fn rem(self, other: Self) -> Self::Output {
         match (self, other) {
             (ConstValue::Int(i1), ConstValue::Int(i2)) => Some(ConstValue::Int(i1.rem(i2)?)),
-            (ConstValue::F32(i1), ConstValue::F32(i2)) => Some(ConstValue::F32(i1.rem(i2))),
-            (ConstValue::F64(i1), ConstValue::F64(i2)) => Some(ConstValue::F64(i1.rem(i2))),
+            (ConstValue::Float(i1), ConstValue::Float(i2)) => Some(ConstValue::Float(i1.rem(i2)?)),
             _ => None,
         }
     }
@@ -103,8 +98,7 @@ impl Neg for ConstValue {
     fn neg(self) -> Self::Output {
         match self {
             ConstValue::Int(i1) => Some(ConstValue::Int(i1.neg()?)),
-            ConstValue::F32(i1) => Some(ConstValue::F32(i1.neg())),
-            ConstValue::F64(i1) => Some(ConstValue::F64(i1.neg())),
+            ConstValue::Float(i1) => Some(ConstValue::Float(i1.neg()?)),
             _ => None,
         }
     }
@@ -133,18 +127,18 @@ impl ConstValue {
                     #c
                 }
             }
-            ConstValue::F32(s) => quote! { #s },
-            ConstValue::F64(s) => quote! { #s },
+            ConstValue::Float(s) => match s {
+                ConstFloat::F64(a) => quote! { #a },
+                ConstFloat::F32(a) => quote! { #a },
+            }
         }
     }
 
     pub fn cast_to(&self, target: &Type) -> Option<Self> {
         match (self, target) {
             (ConstValue::Int(i1), Type::Scalar(s)) => Some(ConstValue::Int(i1.cast_to(s.scalar))),
-            (ConstValue::F32(i1), Type::F32) => Some(ConstValue::F32(*i1 as f32)),
-            (ConstValue::F64(i1), Type::F32) => Some(ConstValue::F32(*i1 as f32)),
-            (ConstValue::F32(i1), Type::F64) => Some(ConstValue::F64(*i1 as f64)),
-            (ConstValue::F64(i1), Type::F64) => Some(ConstValue::F64(*i1 as f64)),
+            (ConstValue::Float(i1), Type::F32) => Some(ConstValue::Float(i1.cast_to(ScalarType::F32))),
+            (ConstValue::Float(i1), Type::F64) => Some(ConstValue::Float(i1.cast_to(ScalarType::F64))),
             //todo: int <-> float casting
             _ => None,
         }

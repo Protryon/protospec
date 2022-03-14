@@ -24,6 +24,9 @@ pub use call::*;
 mod const_int;
 pub use const_int::*;
 
+mod const_float;
+pub use const_float::*;
+
 mod int;
 pub use int::*;
 

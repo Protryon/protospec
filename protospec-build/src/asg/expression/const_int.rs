@@ -203,6 +203,7 @@ impl ConstInt {
                 ScalarType::U32 => ConstInt::U32(*i1 as u32),
                 ScalarType::U64 => ConstInt::U64(*i1 as u64),
                 ScalarType::U128 => ConstInt::U128(*i1 as u128),
+                _ => panic!("This isn't an int, but a float!"),
             }
         )
     }
@@ -251,6 +252,7 @@ impl ConstInt {
                     u128::from_str_radix(value, 16)
                         .map_err(|_| AsgError::InvalidInt(value.to_string(), span))?,
                 ),
+                _ => panic!("This isn't an int, but a float!"),
             });
         }
         Ok(match scalar_type {
@@ -304,6 +306,7 @@ impl ConstInt {
                     .parse()
                     .map_err(|_| AsgError::InvalidInt(value.to_string(), span))?,
             ),
+            _ => panic!("This isn't an int, but a float!"),
         })
     }
 }
