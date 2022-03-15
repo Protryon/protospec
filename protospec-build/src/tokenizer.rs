@@ -42,6 +42,8 @@ pub enum Token {
     I128Le,
     F32,
     F64,
+    F32Le,
+    F64Le,
     Bool,
     Lt,
     Gt,
@@ -126,6 +128,8 @@ impl fmt::Display for Token {
             I128Le => write!(f, "i128le "),
             F32 => write!(f, "f32 "),
             F64 => write!(f, "f64 "),
+            F32Le => write!(f, "f32le "),
+            F64Le => write!(f, "f64le "),
             Bool => write!(f, "bool "),
             Lt => write!(f, "< "),
             Gt => write!(f, "> "),
@@ -437,6 +441,8 @@ impl Token {
                     "container" => Token::Container,
                     "f32" => Token::F32,
                     "f64" => Token::F64,
+                    "f32le" => Token::F32Le,
+                    "f64le" => Token::F64Le,
                     "enum" => Token::Enum,
                     "default" => Token::Default,
                     "bitfield" => Token::Bitfield,
@@ -636,6 +642,8 @@ mod tests {
         test block*/container
         f32
         f64
+        f32le
+        f64le
         enum
         default
         bitfield
@@ -657,7 +665,7 @@ mod tests {
             output,
             r#"test_ident"string""str"ing""str\ing"12345-12345type as import import_ffi i8 u8 i16le u16le transform function const /*
 
-        test block*/ container f32 f64 enum default bitfield true false bool from ,;:?[]{}< > ?+-/ *%.. <= >= = == != ! ()// test$
+        test block*/ container f32 f64 f32le f64le enum default bitfield true false bool from ,;:?[]{}< > ?+-/ *%.. <= >= = == != ! ()// test$
 :> || && | ^| >> << >>> ~. ?: //
 "#
         );

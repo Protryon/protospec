@@ -13,6 +13,8 @@ pub fn parse_scalar_type(t: &mut TokenIter) -> Option<EndianScalarType> {
             Token::U32,
             Token::U64,
             Token::U128,
+            Token::F32,
+            Token::F64,
             Token::I16Le,
             Token::I32Le,
             Token::I64Le,
@@ -21,6 +23,8 @@ pub fn parse_scalar_type(t: &mut TokenIter) -> Option<EndianScalarType> {
             Token::U32Le,
             Token::U64Le,
             Token::U128Le,
+            Token::F32Le,
+            Token::F64Le,
         ])
         .ok()?;
     let scalar = match token {
@@ -34,6 +38,8 @@ pub fn parse_scalar_type(t: &mut TokenIter) -> Option<EndianScalarType> {
         Token::U32 => ScalarType::U32,
         Token::U64 => ScalarType::U64,
         Token::U128 => ScalarType::U128,
+        Token::F32 => ScalarType::F32,
+        Token::F64 => ScalarType::F64,
         Token::I16Le => ScalarType::I16,
         Token::I32Le => ScalarType::I32,
         Token::I64Le => ScalarType::I64,
@@ -42,6 +48,8 @@ pub fn parse_scalar_type(t: &mut TokenIter) -> Option<EndianScalarType> {
         Token::U32Le => ScalarType::U32,
         Token::U64Le => ScalarType::U64,
         Token::U128Le => ScalarType::U128,
+        Token::F32Le => ScalarType::F32,
+        Token::F64Le => ScalarType::F64,
         _ => return None,
     };
     Some(EndianScalarType {
@@ -55,6 +63,8 @@ pub fn parse_scalar_type(t: &mut TokenIter) -> Option<EndianScalarType> {
             Token::U32Le => Endian::Little,
             Token::U64Le => Endian::Little,
             Token::U128Le => Endian::Little,
+            Token::F32Le => Endian::Little,
+            Token::F64Le => Endian::Little,
             _ => Endian::Big,
         },
     })
